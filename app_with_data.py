@@ -13,6 +13,10 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 from threading import Thread
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from movement_features import MovementFeatureExtractor, SessionRecorder
 from database import RehabDatabase
@@ -36,13 +40,13 @@ CORS(app)  # Enable CORS for React app
 # Initialize database
 db = RehabDatabase('flowstate.db')
 
-# Initialize Gemini AI (set API key)
-os.environ['GEMINI_API_KEY'] = 'AIzaSyAFCZnP4CA8bALqSNV0vDBN9h_Ksz7vLu8'
+# Initialize Gemini AI (uses environment variable GEMINI_API_KEY)
 try:
     gemini_analyzer = GeminiHandAnalyzer()
     print("✅ Gemini AI initialized successfully")
 except Exception as e:
     print(f"⚠️  Gemini AI not available: {e}")
+    gemini_analyzer = None
     gemini_analyzer = None
 
 # Hand landmark connections for drawing

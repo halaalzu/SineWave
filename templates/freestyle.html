@@ -51,8 +51,8 @@
 
     <!-- Camera Feed -->
     <div class="mb-6 border-[5px] border-foreground overflow-hidden relative" style="box-shadow: 8px 8px 0 hsl(0, 0%, 10%);">
-        <video id="videoElement" autoplay playsinline></video>
-        <canvas id="canvas" style="position: absolute; top: 0; left: 0;"></canvas>
+        <img id="videoElement" src="/video_feed" style="transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover;" />
+        <canvas id="canvas" style="position: absolute; top: 0; left: 0; transform: scaleX(-1);"></canvas>
         <!-- Hand label in top-left corner -->
         <div id="handLabel" class="absolute top-4 left-4 bg-foreground text-card border-2 border-card px-4 py-2 font-display text-xl tracking-wider" style="box-shadow: 3px 3px 0 rgba(0,0,0,0.3);">
             NO HAND
@@ -111,12 +111,19 @@ const POSE_NOTES = {
     '3': { freq: 261.63, name: 'C' }
 };
 
-// Initialize camera
-navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => {
-        document.getElementById('videoElement').srcObject = stream;
-    })
-    .catch(err => console.error('Camera error:', err));
+// Initialize camera using Flask video stream
+const videoElement = document.getElementById('videoElement');
+videoElement.onload = () => {
+    console.log('✅ Video stream loaded from Flask');
+    // Set canvas size to match image
+    const canvas = document.getElementById('canvas');
+    canvas.width = videoElement.naturalWidth || 640;
+    canvas.height = videoElement.naturalHeight || 480;
+};
+videoElement.onerror = (err) => {
+    console.error('❌ Video stream error:', err);
+    console.log('Make sure Flask server is running and /video_feed endpoint is accessible');
+};
 
 // Auto-initialize audio on page load
 window.addEventListener('load', () => {
@@ -256,8 +263,16 @@ function startPosePolling() {
                 }
                 
                 // Draw skeleton on canvas
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                const canvas = document.getElementById('canvas');
+                const video = document.getElementById('videoElement');
+                const ctx = canvas.getContext('2d');
+                
+                // Set canvas size to match the image stream (use fixed size since it's an img element)
+                if (canvas.width === 0 || canvas.height === 0) {
+                    canvas.width = video.naturalWidth || 640;
+                    canvas.height = video.naturalHeight || 480;
+                }
+                
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 if (landmarks && landmarks.length > 0) {

@@ -27,9 +27,45 @@ from gemini_analyzer import GeminiHandAnalyzer
 try:
     import pygame
     import math
-    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
-    SOUND_ENABLED = True
-    print("✅ Pygame audio initialized successfully")
+    
+    # Try different audio initialization methods for better Windows compatibility
+    audio_initialized = False
+    
+    # Try WASAPI first (Windows default)
+    try:
+        pygame.mixer.pre_init(frequency=22050, size=-16, channels=1, buffer=512)
+        pygame.mixer.init()
+        audio_initialized = True
+        print("✅ Pygame audio initialized with WASAPI")
+    except pygame.error as e:
+        print(f"⚠️  WASAPI audio failed: {e}")
+        
+        # Try DirectSound fallback
+        try:
+            pygame.mixer.quit()  # Clean up previous attempt
+            pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=1024)  # Stereo, larger buffer
+            pygame.mixer.init()
+            audio_initialized = True
+            print("✅ Pygame audio initialized with DirectSound fallback")
+        except pygame.error as e2:
+            print(f"⚠️  DirectSound audio failed: {e2}")
+            
+            # Try basic initialization
+            try:
+                pygame.mixer.quit()  # Clean up previous attempt
+                pygame.mixer.init()  # Use default settings
+                audio_initialized = True
+                print("✅ Pygame audio initialized with default settings")
+            except pygame.error as e3:
+                print(f"⚠️  Default audio failed: {e3}")
+                audio_initialized = False
+    
+    SOUND_ENABLED = audio_initialized
+    
+    if not SOUND_ENABLED:
+        print("❌ Audio initialization failed - sound will be disabled")
+        print("   This won't affect hand tracking or video feed functionality")
+        
 except ImportError:
     SOUND_ENABLED = False
     print("⚠️  pygame not available - install with: pip install pygame")

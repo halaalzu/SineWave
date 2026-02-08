@@ -22,6 +22,7 @@ from movement_features import MovementFeatureExtractor, SessionRecorder
 from database import RehabDatabase
 from joint_analysis import JointAnalyzer
 from gemini_analyzer import GeminiHandAnalyzer
+from session_quality_ml import SessionQualityAnalyzer
 
 # Import pygame for sound feedback
 try:
@@ -40,13 +41,20 @@ CORS(app)  # Enable CORS for React app
 # Initialize database
 db = RehabDatabase('flowstate.db')
 
+# Initialize Session Quality ML Analyzer
+try:
+    quality_analyzer = SessionQualityAnalyzer('flowstate.db')
+    print("✅ Session Quality ML Analyzer initialized successfully")
+except Exception as e:
+    print(f"⚠️  Session Quality Analyzer not available: {e}")
+    quality_analyzer = None
+
 # Initialize Gemini AI (uses environment variable GEMINI_API_KEY)
 try:
     gemini_analyzer = GeminiHandAnalyzer()
     print("✅ Gemini AI initialized successfully")
 except Exception as e:
     print(f"⚠️  Gemini AI not available: {e}")
-    gemini_analyzer = None
     gemini_analyzer = None
 
 # Hand landmark connections for drawing
@@ -259,6 +267,18 @@ class HandTracker:
             print(f"Summary: {summary}")
             
             session_id = self.current_session.session_id
+            
+            # Score session quality with ML model
+            if quality_analyzer:
+                try:
+                    quality_result = quality_analyzer.score_session(session_id)
+                    if quality_result:
+                        print(f"✅ Session scored: {quality_result['quality_score']}/100")
+                        # Retrain model with this session
+                        quality_analyzer.retrain_with_session(session_id)
+                except Exception as e:
+                    print(f"⚠️  Could not score session: {e}")
+            
             self.current_session = None
             
             return session_id
@@ -962,6 +982,69 @@ def user_analytics_by_hand(user_id, hand_type):
         'avg_smoothness': session[3],
         'avg_speed': session[2]
     })
+
+@app.route('/api/user/<user_id>/session-quality')
+def get_session_quality(user_id):
+    """Get ML-scored quality analysis for most recent session"""
+    if not quality_analyzer:
+        return jsonify({'error': 'Quality analyzer not available'}), 503
+    
+    try:
+        result = quality_analyzer.get_most_recent_score(user_id)
+        
+        if not result:
+            return jsonify({'error': 'No completed sessions found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'session': {
+                'id': result['session_id'],
+                'timestamp': result['start_time'],
+                'frames': result['total_frames']
+            },
+            'qualityScore': result['quality_score'],
+            'breakdown': result['breakdown'],
+            'metrics': {
+                'poseVariety': result['pose_variety'],
+                'transitionQuality': result['transition_quality']
+            },
+            'interpretation': _interpret_score(result['quality_score'])
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def _interpret_score(score):
+    """Provide interpretation of quality score"""
+    if score >= 85:
+        return {
+            'level': 'Excellent',
+            'message': 'Outstanding progress! Your movement quality is exceptional.',
+            'emoji': '🌟'
+        }
+    elif score >= 70:
+        return {
+            'level': 'Good',
+            'message': 'Great work! You\'re making solid progress in your rehabilitation.',
+            'emoji': '👍'
+        }
+    elif score >= 50:
+        return {
+            'level': 'Fair',
+            'message': 'You\'re on the right track. Keep practicing to improve further.',
+            'emoji': '💪'
+        }
+    elif score >= 30:
+        return {
+            'level': 'Needs Improvement',
+            'message': 'Focus on smooth, controlled movements. Practice regularly.',
+            'emoji': '📈'
+        }
+    else:
+        return {
+            'level': 'Beginning',
+            'message': 'Starting your journey. Every session helps build strength and control.',
+            'emoji': '🌱'
+        }
 
 @app.route('/api/gemini/chat', methods=['POST'])
 def gemini_chat():

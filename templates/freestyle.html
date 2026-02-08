@@ -1,0 +1,352 @@
+{% extends "base_cassette.html" %}
+
+{% block title %}FlowState - Freestyle{% endblock %}
+
+{% block vertical_text %}PLAY{% endblock %}
+{% block right_vertical_text %}FREE STYLE{% endblock %}
+{% block red_panel %}{% endblock %}
+
+{% block back_button %}
+<button onclick="window.location.href='/'"
+    class="absolute top-[100px] left-4 md:left-8 z-10 bg-secondary border-4 border-foreground px-4 py-2 font-display text-lg tracking-widest text-secondary-foreground cursor-pointer btn-3d">
+    ◀ BACK
+</button>
+{% endblock %}
+
+{% block content_margin %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+    }
+    .animate-blink {
+        animation: blink 1s step-end infinite;
+    }
+    #videoElement {
+        transform: scaleX(-1);
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    canvas {
+        transform: scaleX(-1);
+    }
+</style>
+{% endblock %}
+
+{% block cassette_content %}
+<div class="mt-8 pr-0 md:pr-12">
+    <!-- Title -->
+    <div class="mb-6 flex items-center justify-between">
+        <h1 class="font-display text-4xl md:text-5xl tracking-[0.25em] text-foreground leading-[0.9]">
+            FREE STYLE
+        </h1>
+        <div id="recIndicator" class="hidden flex items-center gap-2 bg-foreground px-3 py-1 border-2 border-primary">
+            <div class="w-3 h-3 rounded-full bg-primary animate-blink"></div>
+            <span class="font-display text-primary tracking-widest text-sm">REC</span>
+        </div>
+    </div>
+
+    <!-- Camera Feed -->
+    <div class="mb-6 border-[5px] border-foreground overflow-hidden relative" style="box-shadow: 8px 8px 0 hsl(0, 0%, 10%);">
+        <video id="videoElement" autoplay playsinline></video>
+        <canvas id="canvas" style="position: absolute; top: 0; left: 0;"></canvas>
+        <!-- Hand label in top-left corner -->
+        <div id="handLabel" class="absolute top-4 left-4 bg-foreground text-card border-2 border-card px-4 py-2 font-display text-xl tracking-wider" style="box-shadow: 3px 3px 0 rgba(0,0,0,0.3);">
+            NO HAND
+        </div>
+        <div id="poseDisplay" class="absolute top-4 right-4 bg-foreground/90 text-white px-4 py-2 font-display text-2xl tracking-wider"></div>
+        <!-- Gesture display at bottom -->
+        <div id="gestureDisplay" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-foreground text-card border-4 border-card px-8 py-3 font-display text-3xl tracking-widest" style="box-shadow: 4px 4px 0 rgba(0,0,0,0.5);">
+            NO GESTURE
+        </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="bg-card border-4 border-foreground p-4 mb-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="font-display text-sm tracking-widest text-foreground/70 mb-2">
+            📋 INSTRUCTIONS
+        </div>
+        <ul class="text-xs font-bold tracking-wider text-foreground/80 space-y-1">
+            <li>• Move your hands naturally in front of the camera</li>
+            <li>• Practice different movements at your own pace</li>
+            <li class="text-primary">• Make poses ☝️ (E), ✌️ (D), 🤟 (C) to play Hot Cross Buns!</li>
+            <li>• Your movements are automatically tracked and analyzed</li>
+        </ul>
+    </div>
+
+    <!-- Last Note Display -->
+    <div id="lastNoteDisplay" class="mb-6 bg-secondary border-4 border-foreground p-4 text-center">
+        <div class="font-display text-sm tracking-widest text-secondary-foreground/70 mb-2">LAST NOTE</div>
+        <div id="lastNote" class="font-display text-4xl tracking-wider text-secondary-foreground">-</div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="bg-card border-4 border-foreground p-4" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="font-display text-lg tracking-widest text-foreground mb-2">
+            🤖 AI COACH
+        </div>
+        <div id="analysis" class="text-sm text-foreground/80 font-mono min-h-[60px]">
+            Enable audio and start recording to get live coaching feedback...
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let isRecording = false;
+let sessionId = null;
+let audioContext = null;
+let lastPose = null;
+let activeOscillators = [];
+let activeMasterGain = null;
+let hasPlayedNote = false;
+
+const POSE_NOTES = {
+    '1': { freq: 329.63, name: 'E' },
+    '2': { freq: 293.66, name: 'D' },
+    '3': { freq: 261.63, name: 'C' }
+};
+
+// Initialize camera
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+        document.getElementById('videoElement').srcObject = stream;
+    })
+    .catch(err => console.error('Camera error:', err));
+
+// Auto-initialize audio on page load
+window.addEventListener('load', () => {
+    // Initialize audio context
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Start pose polling immediately
+    startPosePolling();
+    
+    console.log('✅ Audio and pose detection auto-started');
+    console.log('Audio context state:', audioContext.state);
+});
+
+// Resume audio context on any user interaction (required by browsers)
+function resumeAudioContext() {
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+            console.log('🔊 Audio context resumed - sound enabled!');
+        });
+    }
+}
+
+// Add click handler to resume audio
+document.addEventListener('click', resumeAudioContext, { once: true });
+document.addEventListener('touchstart', resumeAudioContext, { once: true });
+
+// Piano tone generation
+function generatePianoTone(frequency, duration = 0.5) {
+    if (!audioContext) {
+        console.warn('Audio context not initialized');
+        return;
+    }
+    
+    // Resume audio context if suspended
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+            console.log('🔊 Audio context resumed');
+        });
+    }
+    
+    if (activeMasterGain) {
+        const now = audioContext.currentTime;
+        activeMasterGain.gain.cancelScheduledValues(now);
+        activeMasterGain.gain.setValueAtTime(activeMasterGain.gain.value, now);
+        activeMasterGain.gain.linearRampToValueAtTime(0, now + 0.01);
+    }
+    
+    activeOscillators.forEach(osc => {
+        try { osc.stop(); } catch(e) {}
+    });
+    activeOscillators = [];
+
+    const now = audioContext.currentTime;
+    const masterGain = audioContext.createGain();
+    masterGain.connect(audioContext.destination);
+    masterGain.gain.setValueAtTime(0, now);
+    activeMasterGain = masterGain;
+    
+    const attack = 0.01, decay = 0.05, sustain = 0.6, release = 0.1;
+    masterGain.gain.linearRampToValueAtTime(0.3, now + attack);
+    masterGain.gain.linearRampToValueAtTime(0.3 * sustain, now + attack + decay);
+    masterGain.gain.setValueAtTime(0.3 * sustain, now + duration - release);
+    masterGain.gain.linearRampToValueAtTime(0, now + duration);
+    
+    const harmonics = [
+        { mult: 1.0, amp: 1.0 },
+        { mult: 2.0, amp: 0.5 },
+        { mult: 3.0, amp: 0.25 },
+        { mult: 4.0, amp: 0.125 },
+        { mult: 5.0, amp: 0.0625 }
+    ];
+    
+    harmonics.forEach(({ mult, amp }) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.frequency.value = frequency * mult;
+        oscillator.type = 'sine';
+        gainNode.gain.value = amp;
+        oscillator.connect(gainNode);
+        gainNode.connect(masterGain);
+        oscillator.start(now);
+        oscillator.stop(now + duration);
+        activeOscillators.push(oscillator);
+    });
+    
+    setTimeout(() => {
+        activeOscillators = [];
+        activeMasterGain = null;
+    }, duration * 1000 + 100);
+}
+
+// Pose polling
+function startPosePolling() {
+    const canvas = document.getElementById('canvas');
+    const video = document.getElementById('videoElement');
+    const ctx = canvas.getContext('2d');
+    
+    setInterval(async () => {
+        try {
+            const response = await fetch('/api/current_pose');
+            if (response.ok) {
+                const data = await response.json();
+                const pose = data.pose;
+                const landmarks = data.landmarks;
+                const handedness = data.handedness;
+                
+                // Update pose display (top-right)
+                document.getElementById('poseDisplay').textContent = pose || 'No pose';
+                
+                // Update gesture display (bottom center) with descriptive names
+                const gestureDisplay = document.getElementById('gestureDisplay');
+                if (pose === '1') {
+                    gestureDisplay.textContent = '☝️ ONE FINGER';
+                } else if (pose === '2') {
+                    gestureDisplay.textContent = '✌️ TWO FINGERS';
+                } else if (pose === '3') {
+                    gestureDisplay.textContent = '🤟 THREE FINGERS';
+                } else if (pose === 'palm') {
+                    gestureDisplay.textContent = '🖐️ OPEN PALM';
+                } else if (pose === 'fist') {
+                    gestureDisplay.textContent = '✊ CLOSED FIST';
+                } else if (pose === null || pose === '' || pose === 'None') {
+                    gestureDisplay.textContent = 'NO GESTURE';
+                } else {
+                    gestureDisplay.textContent = pose.toUpperCase();
+                }
+                
+                // Update hand label (top-left) - always show detected hand or no hand
+                const handLabel = document.getElementById('handLabel');
+                if (handedness && handedness.length > 0 && handedness[0].categoryName) {
+                    const hand = handedness[0].categoryName;
+                    handLabel.textContent = `${hand.toUpperCase()} HAND`;
+                } else if (landmarks && landmarks.length > 0) {
+                    handLabel.textContent = 'HAND DETECTED';
+                } else {
+                    handLabel.textContent = 'NO HAND';
+                }
+                
+                // Draw skeleton on canvas
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (landmarks && landmarks.length > 0) {
+                    drawHandSkeleton(ctx, landmarks[0], canvas.width, canvas.height);
+                }
+                
+                // Play note logic: play once when pose changes, reset with fist
+                if (pose === 'fist') {
+                    // Fist resets the note playing flag
+                    hasPlayedNote = false;
+                    lastPose = 'fist';
+                } else if (POSE_NOTES[pose]) {
+                    // Play note only if it's a new pose and we haven't played it yet
+                    if (pose !== lastPose) {
+                        playNote(pose);
+                        lastPose = pose;
+                        hasPlayedNote = true;
+                    }
+                } else {
+                    lastPose = pose;
+                }
+            }
+        } catch (e) {
+            console.error('Pose check error:', e);
+        }
+    }, 50);
+}
+
+// Draw hand skeleton with green lines
+function drawHandSkeleton(ctx, landmarks, width, height) {
+    ctx.strokeStyle = '#00ff00'; // Green color
+    ctx.lineWidth = 3;
+    ctx.fillStyle = '#00ff00';
+    
+    // Hand connections (MediaPipe hand landmark connections)
+    const connections = [
+        [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+        [0, 5], [5, 6], [6, 7], [7, 8],  // Index finger
+        [0, 9], [9, 10], [10, 11], [11, 12],  // Middle finger
+        [0, 13], [13, 14], [14, 15], [15, 16],  // Ring finger
+        [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+        [5, 9], [9, 13], [13, 17]  // Palm
+    ];
+    
+    // Draw connections
+    ctx.beginPath();
+    connections.forEach(([start, end]) => {
+        if (landmarks[start] && landmarks[end]) {
+            const startX = landmarks[start].x * width;
+            const startY = landmarks[start].y * height;
+            const endX = landmarks[end].x * width;
+            const endY = landmarks[end].y * height;
+            
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+        }
+    });
+    ctx.stroke();
+    
+    // Draw landmark points
+    landmarks.forEach(landmark => {
+        const x = landmark.x * width;
+        const y = landmark.y * height;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+    });
+}
+
+function playNote(pose) {
+    console.log('🎵 playNote called with pose:', pose);
+    const noteInfo = POSE_NOTES[pose];
+    if (noteInfo && audioContext) {
+        console.log('🎵 Playing note:', noteInfo.name, 'at frequency:', noteInfo.freq, 'Hz');
+        console.log('🎵 Audio context state:', audioContext.state);
+        generatePianoTone(noteInfo.freq);
+        document.getElementById('lastNote').textContent = noteInfo.name;
+    } else {
+        console.warn('❌ Cannot play note - noteInfo:', noteInfo, 'audioContext:', !!audioContext);
+    }
+}
+
+// Toast notification
+function showToast(title, message, isError = false) {
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 bg-${isError ? 'destructive' : 'secondary'} text-${isError ? 'destructive' : 'secondary'}-foreground border-4 border-foreground p-4 btn-3d z-50`;
+    toast.innerHTML = `<div class="font-display text-lg tracking-wider">${title}</div><div class="text-sm">${message}</div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

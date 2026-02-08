@@ -1,0 +1,59 @@
+{% extends "base_cassette.html" %}
+
+{% block title %}FlowState - Home{% endblock %}
+
+{% block vertical_text %}AGAIN{% endblock %}
+{% block right_vertical_text %}PLAY IT AGAIN{% endblock %}
+
+{% block cassette_content %}
+<!-- Title -->
+<div class="mb-12">
+    <h1 class="font-display text-6xl md:text-7xl tracking-[0.25em] text-foreground leading-[0.9]">
+        PLAY IT<br />AGAIN
+    </h1>
+</div>
+
+<!-- Menu Cards -->
+<div class="flex flex-col gap-6 pr-0 md:pr-12">
+    <!-- Free Style Card -->
+    <div onclick="window.location.href='/freestyle'" 
+         class="cursor-pointer bg-card border-4 border-foreground p-6 btn-3d group">
+        <div class="flex items-start gap-4">
+            <div class="text-5xl">🎨</div>
+            <div class="flex-1">
+                <h2 class="font-display text-3xl tracking-wider text-foreground mb-2 group-hover:text-primary transition-colors">
+                    FREE STYLE
+                </h2>
+                <p class="font-mono text-sm text-muted-foreground">
+                    Practice at your own pace, no limits
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Levels Card -->
+    <div onclick="window.location.href='/levels'" 
+         class="cursor-pointer bg-card border-4 border-foreground p-6 btn-3d group">
+        <div class="flex items-start gap-4">
+            <div class="text-5xl">🎮</div>
+            <div class="flex-1">
+                <h2 class="font-display text-3xl tracking-wider text-foreground mb-2 group-hover:text-primary transition-colors">
+                    LEVELS
+                </h2>
+                <p class="font-mono text-sm text-muted-foreground">
+                    Progress through structured therapy stages
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block bottom_right_area %}
+<div class="absolute bottom-6 right-6">
+    <button onclick="window.location.href='/analytics'" 
+            class="bg-secondary border-4 border-foreground px-6 py-3 font-display text-xl tracking-widest text-secondary-foreground cursor-pointer btn-3d">
+        📊 STATS
+    </button>
+</div>
+{% endblock %}

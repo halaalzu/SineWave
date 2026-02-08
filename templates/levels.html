@@ -1,0 +1,36 @@
+{% extends "base_cassette.html" %}
+
+{% block title %}FlowState - Levels{% endblock %}
+
+{% block vertical_text %}LEVELS{% endblock %}
+{% block right_vertical_text %}THERAPY STAGES{% endblock %}
+
+{% block back_button %}
+<button onclick="window.location.href='/'"
+    class="absolute top-[100px] left-4 md:left-[38%] z-10 bg-secondary border-4 border-foreground px-4 py-2 font-display text-lg tracking-widest text-secondary-foreground cursor-pointer btn-3d">
+    ◀ BACK
+</button>
+{% endblock %}
+
+{% block cassette_content %}
+<div class="mt-8 pr-0 md:pr-12">
+    <h1 class="font-display text-4xl md:text-5xl tracking-[0.25em] text-foreground leading-[0.9] mb-6">
+        THERAPY<br/>LEVELS
+    </h1>
+
+    <div class="bg-card border-4 border-foreground p-6 text-center" style="box-shadow: 8px 8px 0 hsl(0, 0%, 10%);">
+        <div class="text-5xl mb-4">🚧</div>
+        <div class="font-display text-2xl tracking-widest text-foreground mb-2">
+            COMING SOON
+        </div>
+        <p class="text-sm font-bold tracking-wider text-foreground/60">
+            Structured rehabilitation levels are in development.<br/>
+            Use Free Style mode for now!
+        </p>
+        <button onclick="window.location.href='/freestyle'"
+                class="mt-6 bg-accent border-4 border-foreground px-6 py-3 font-display text-xl tracking-widest text-accent-foreground cursor-pointer btn-3d">
+            🎨 GO TO FREESTYLE
+        </button>
+    </div>
+</div>
+{% endblock %}

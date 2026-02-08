@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FlowState{% endblock %}</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Courier+Prime:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: 'hsl(35, 26%, 76%)',
+              foreground: 'hsl(0, 0%, 10%)',
+              card: 'hsl(31, 52%, 92%)',
+              'card-foreground': 'hsl(0, 0%, 10%)',
+              primary: 'hsl(0, 52%, 54%)',
+              'primary-foreground': 'hsl(31, 52%, 92%)',
+              secondary: 'hsl(27, 14%, 25%)',
+              'secondary-foreground': 'hsl(31, 52%, 92%)',
+              muted: 'hsl(35, 20%, 70%)',
+              'muted-foreground': 'hsl(27, 14%, 35%)',
+              accent: 'hsl(0, 52%, 54%)',
+              border: 'hsl(0, 0%, 10%)',
+            },
+            fontFamily: {
+              display: ['"Bebas Neue"', 'sans-serif'],
+              mono: ['"Space Mono"', 'monospace'],
+            },
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      body {
+        font-family: 'Courier Prime', monospace;
+        background-color: hsl(35, 26%, 76%);
+      }
+      
+      .font-display {
+        font-family: 'Bebas Neue', sans-serif;
+      }
+      
+      .btn-3d {
+        box-shadow: 4px 4px 0 hsl(0, 0%, 10%);
+        transition: all 0.1s ease;
+      }
+      
+      .btn-3d:hover {
+        transform: translate(-0.125rem, -0.125rem);
+        box-shadow: 6px 6px 0 hsl(0, 0%, 10%);
+      }
+      
+      .btn-3d:active {
+        transform: translate(0.125rem, 0.125rem);
+        box-shadow: 2px 2px 0 hsl(0, 0%, 10%);
+      }
+      
+      .cassette-border {
+        border: 8px solid hsl(0, 0%, 10%);
+        box-shadow: 12px 12px 0 hsl(0, 0%, 10%);
+      }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-background">
+    <div class="min-h-screen flex items-center justify-center bg-background p-4 md:p-8 relative z-[1]">
+        <div class="max-w-[900px] w-full relative">
+            <!-- Vertical text on left -->
+            {% block vertical_text_area %}
+            <div class="hidden md:block absolute -left-10 top-1/2 -translate-y-1/2 -rotate-90 font-display text-6xl tracking-[0.3em] text-foreground whitespace-nowrap font-black z-10">
+                {% block vertical_text %}AGAIN{% endblock %}
+            </div>
+            {% endblock %}
+
+            <div class="bg-card cassette-border relative">
+                <!-- Top border lines -->
+                <div class="absolute top-0 left-0 right-0 h-20 border-b-[3px] border-foreground">
+                    <div class="absolute left-0 right-0 top-5 h-[3px] bg-foreground"></div>
+                    <div class="absolute left-0 right-0 top-10 h-[3px] bg-foreground"></div>
+                </div>
+
+                <!-- Top barcode -->
+                <div class="absolute top-8 right-8 md:right-12 z-10">
+                    <div class="flex flex-col gap-1">
+                        {% for i in range(8) %}
+                        <div class="flex gap-[3px]">
+                            {% for j in range(10) %}
+                            <div class="w-[6px] h-[6px] bg-foreground"></div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Red panel on left -->
+                {% block red_panel %}
+                <div class="hidden md:block absolute left-0 top-[100px] w-[35%] bottom-20 bg-primary border-r-4 border-foreground">
+                    <div class="absolute top-1/2 left-[15%] -translate-x-1/2 -translate-y-1/2 opacity-[0.15] pointer-events-none">
+                        <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+                            <circle cx="60" cy="60" r="50" stroke="currentColor" stroke-width="3" class="text-foreground"/>
+                            <circle cx="60" cy="60" r="35" stroke="currentColor" stroke-width="2" class="text-foreground"/>
+                            <circle cx="60" cy="60" r="20" fill="currentColor" class="text-foreground"/>
+                        </svg>
+                    </div>
+                </div>
+                {% endblock %}
+
+                <!-- Content area -->
+                <div class="p-6 pt-24 md:p-12 md:pt-24 relative min-h-[500px]">
+                    <!-- Back button -->
+                    {% block back_button %}{% endblock %}
+
+                    <!-- Main content -->
+                    <div class="{% block content_margin %}md:ml-[38%]{% endblock %}">
+                        {% block cassette_content %}{% endblock %}
+                    </div>
+
+                    <!-- Right vertical text -->
+                    {% block right_vertical_text_area %}
+                    <div class="hidden md:block font-display text-2xl tracking-[0.3em] text-foreground absolute right-8 top-1/2 -translate-y-1/2 rotate-180" style="writing-mode: vertical-rl;">
+                        {% block right_vertical_text %}{% endblock %}
+                    </div>
+                    {% endblock %}
+
+                    <!-- Bottom right element -->
+                    {% block bottom_right_area %}{% endblock %}
+                </div>
+
+                <!-- Bottom barcode -->
+                <div class="absolute bottom-6 left-8">
+                    <div class="flex gap-[3px]">
+                        {% for i in range(14) %}
+                        <div class="flex flex-col gap-[3px]">
+                            {% for j in range(5) %}
+                            <div class="w-[6px] h-[6px] bg-foreground"></div>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

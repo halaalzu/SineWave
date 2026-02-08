@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FlowState - Hand Rehabilitation{% endblock %}</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Courier+Prime:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: 'hsl(35, 26%, 76%)',
+              foreground: 'hsl(0, 0%, 10%)',
+              card: 'hsl(31, 52%, 92%)',
+              'card-foreground': 'hsl(0, 0%, 10%)',
+              primary: 'hsl(0, 52%, 54%)',
+              'primary-foreground': 'hsl(31, 52%, 92%)',
+              secondary: 'hsl(27, 14%, 25%)',
+              'secondary-foreground': 'hsl(31, 52%, 92%)',
+              muted: 'hsl(35, 20%, 70%)',
+              'muted-foreground': 'hsl(27, 14%, 35%)',
+              accent: 'hsl(0, 52%, 54%)',
+              'accent-foreground': 'hsl(31, 52%, 92%)',
+              destructive: 'hsl(0, 84%, 60%)',
+              'destructive-foreground': 'hsl(0, 0%, 100%)',
+              border: 'hsl(0, 0%, 10%)',
+            },
+            fontFamily: {
+              display: ['"Bebas Neue"', 'sans-serif'],
+              body: ['"Courier Prime"', 'monospace'],
+              mono: ['"Space Mono"', 'monospace'],
+            },
+            boxShadow: {
+              'cassette': '12px 12px 0 hsl(0, 0%, 10%)',
+              'btn': '4px 4px 0 hsl(0, 0%, 10%)',
+              'btn-hover': '6px 6px 0 hsl(0, 0%, 10%)',
+              'btn-active': '2px 2px 0 hsl(0, 0%, 10%)',
+            },
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      body {
+        font-family: 'Courier Prime', monospace;
+        background-color: hsl(35, 26%, 76%);
+      }
+      
+      .font-display {
+        font-family: 'Bebas Neue', sans-serif;
+      }
+      
+      .font-mono {
+        font-family: 'Space Mono', monospace;
+      }
+      
+      /* Button styles */
+      .btn-3d {
+        box-shadow: 4px 4px 0 hsl(0, 0%, 10%);
+        transition: all 0.1s ease;
+      }
+      
+      .btn-3d:hover {
+        transform: translate(-0.125rem, -0.125rem);
+        box-shadow: 6px 6px 0 hsl(0, 0%, 10%);
+      }
+      
+      .btn-3d:active {
+        transform: translate(0.125rem, 0.125rem);
+        box-shadow: 2px 2px 0 hsl(0, 0%, 10%);
+      }
+      
+      /* Cassette layout */
+      .cassette-border {
+        border: 8px solid hsl(0, 0%, 10%);
+        box-shadow: 12px 12px 0 hsl(0, 0%, 10%);
+      }
+      
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 10px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: hsl(35, 20%, 70%);
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: hsl(0, 0%, 10%);
+        border: 2px solid hsl(35, 20%, 70%);
+      }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-background min-h-screen">
+    {% block content %}{% endblock %}
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

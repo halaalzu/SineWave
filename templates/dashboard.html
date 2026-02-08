@@ -166,11 +166,161 @@
         }
         .filter-row label { font-size: 13px; color: rgba(255,255,255,0.4); }
 
+        /* Chat Box Styles */
+        .chat-container {
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.9), rgba(50, 30, 80, 0.8));
+            border: 1px solid rgba(250, 204, 21, 0.2);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            padding: 0;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, rgba(120, 80, 200, 0.3), rgba(250, 204, 21, 0.2));
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chat-header h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .ai-icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc04, #34a853);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .chat-messages {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 15px;
+            min-height: 120px;
+        }
+        
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            max-width: 85%;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .chat-message.user {
+            background: linear-gradient(135deg, rgba(120, 80, 200, 0.2), rgba(120, 80, 200, 0.1));
+            border: 1px solid rgba(120, 80, 200, 0.3);
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .chat-message.ai {
+            background: linear-gradient(135deg, rgba(250, 204, 21, 0.15), rgba(250, 204, 21, 0.05));
+            border: 1px solid rgba(250, 204, 21, 0.2);
+            margin-right: auto;
+        }
+        
+        .chat-input-container {
+            padding: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid rgba(250, 204, 21, 0.2);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .chat-input:focus {
+            border-color: rgba(250, 204, 21, 0.5);
+        }
+        
+        .chat-send-btn {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, rgba(120, 80, 200, 0.8), rgba(250, 204, 21, 0.6));
+            border: 1px solid rgba(250, 204, 21, 0.3);
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .chat-send-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(120, 80, 200, 1), rgba(250, 204, 21, 0.8));
+            border-color: rgba(250, 204, 21, 0.5);
+        }
+        
+        .chat-send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            display: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-style: italic;
+            font-size: 13px;
+            padding: 10px 14px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .chat-toggle {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 18px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .chat-toggle:hover {
+            color: rgba(250, 204, 21, 0.8);
+        }
+
         @media (max-width: 800px) {
             .stats-row { grid-template-columns: repeat(2, 1fr); }
             .grid-2 { grid-template-columns: 1fr; }
             .top-nav { padding: 16px 20px; }
             .page { padding: 20px; }
+            .chat-messages { max-height: 200px; }
+            .chat-message { max-width: 90%; font-size: 13px; }
         }
     </style>
 </head>
@@ -195,6 +345,34 @@
             <a href="{{ url_for('calibrate') }}">Calibrate Now →</a>
         </div>
         {% endif %}
+
+        <!-- AI Performance Chat -->
+        <div class="chat-container" id="chatContainer">
+            <div class="chat-header">
+                <div class="ai-icon">AI</div>
+                <h3>Performance Coach</h3>
+                <button class="chat-toggle" onclick="toggleChat()" id="chatToggle">−</button>
+            </div>
+            <div class="chat-content" id="chatContent">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message ai">
+                        <div>👋 Hi! I'm your AI performance coach. I can analyze your FlowState sessions and provide personalized tips to improve your accuracy and rhythm. Try asking me:</div>
+                        <div style="margin-top: 8px; font-size: 12px; opacity: 0.7;">
+                            • "How can I improve my accuracy?"<br>
+                            • "Analyze my recent performance"<br>
+                            • "What poses should I practice more?"
+                        </div>
+                    </div>
+                </div>
+                <div class="typing-indicator" id="typingIndicator">AI is thinking...</div>
+                <div class="chat-input-container">
+                    <div class="chat-input-row">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="Ask about your performance..." maxlength="200">
+                        <button class="chat-send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Summary Stats -->
         <div class="stats-row">
@@ -485,6 +663,74 @@
                 })
                 .catch(e => alert('Error: ' + e));
         }
+
+        // ── AI Chat Functions ──
+        function toggleChat() {
+            const content = document.getElementById('chatContent');
+            const toggle = document.getElementById('chatToggle');
+            const isCollapsed = content.style.display === 'none';
+            
+            content.style.display = isCollapsed ? 'block' : 'none';
+            toggle.textContent = isCollapsed ? '−' : '+';
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessageToChat(message, 'user');
+            input.value = '';
+            
+            // Disable send button and show typing
+            const sendBtn = document.getElementById('sendBtn');
+            const typingIndicator = document.getElementById('typingIndicator');
+            sendBtn.disabled = true;
+            typingIndicator.style.display = 'block';
+
+            // Send to AI backend
+            fetch('/api/ai_chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    sessions: {{ sessions|tojson|safe }}
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                typingIndicator.style.display = 'none';
+                sendBtn.disabled = false;
+                
+                if (data.error) {
+                    addMessageToChat('Sorry, I encountered an error. Please try again.', 'ai');
+                } else {
+                    addMessageToChat(data.response, 'ai');
+                }
+            })
+            .catch(error => {
+                typingIndicator.style.display = 'none';
+                sendBtn.disabled = false;
+                addMessageToChat('Sorry, I'm having trouble connecting. Please try again.', 'ai');
+            });
+        }
+
+        function addMessageToChat(message, sender) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${sender}`;
+            messageDiv.innerHTML = `<div>${message}</div>`;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Enable Enter key to send message
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !document.getElementById('sendBtn').disabled) {
+                sendMessage();
+            }
+        });
     </script>
 </body>
 </html>

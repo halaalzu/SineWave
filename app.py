@@ -13,11 +13,24 @@ import pygame
 import json
 import csv
 import io
+import google.generativeai as genai
+from dotenv import load_dotenv
 
 import database as db
 
+# Load environment variables from .env file
+load_dotenv()
+
 app = Flask(__name__)
 app.secret_key = 'flowstate_rhythm_game_secret_key_2026'  # Required for session management
+
+# -------------------------
+# 0. Gemini AI Setup  
+# -------------------------
+# Configure Gemini AI (you'll need to set your API key)
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'your_actual_api_key_here')
+if GEMINI_API_KEY != 'your_actual_api_key_here':
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # -------------------------
 # 1. Audio Setup
@@ -1526,6 +1539,98 @@ def api_music_notes():
         "pose_mapping": POSE_MUSIC_MAPPING,
         "available_instruments": ["piano", "bell", "flute"]
     })
+
+
+@app.route('/api/ai_chat', methods=['POST'])
+def ai_chat():
+    """Handle AI chat requests for performance feedback."""
+    try:
+        data = request.json
+        user_message = data.get('message', '').strip()
+        sessions = data.get('sessions', [])
+        
+        if not user_message:
+            return jsonify({'error': 'Message is required'}), 400
+            
+        # Check if Gemini is configured
+        if GEMINI_API_KEY == 'YOUR_GEMINI_API_KEY_HERE':
+            return jsonify({
+                'response': "🤖 AI Coach is not yet configured. To enable AI feedback, please set up your Gemini API key in the environment variables. For now, here are some general tips:\n\n• Practice poses slowly before increasing speed\n• Focus on hand positioning accuracy\n• Try to maintain consistent rhythm\n• Use the calibration feature to improve detection"
+            })
+        
+        # Prepare performance context
+        performance_summary = analyze_user_performance(sessions)
+        
+        # Create system prompt for Gemini
+        system_prompt = f"""You are an AI performance coach for FlowState, a hand pose rhythm game. 
+        
+        User's Performance Summary:
+        {performance_summary}
+        
+        Provide helpful, encouraging feedback focused on improving their hand pose accuracy and rhythm skills. Be specific, positive, and actionable. Keep responses concise (2-3 sentences). Use emojis sparingly for engagement.
+        
+        Current user question: {user_message}"""
+        
+        # Generate response with Gemini
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(system_prompt)
+            ai_response = response.text
+        except Exception as e:
+            print(f"Gemini API error: {e}")
+            ai_response = generate_fallback_response(user_message, performance_summary)
+            
+        return jsonify({'response': ai_response})
+        
+    except Exception as e:
+        print(f"AI Chat error: {e}")
+        return jsonify({'error': 'Failed to process request'}), 500
+
+
+def analyze_user_performance(sessions):
+    """Analyze user's session data to provide context for AI."""
+    if not sessions:
+        return "No session data available yet. Encourage user to play more sessions."
+    
+    # Calculate performance metrics
+    total_sessions = len(sessions)
+    avg_accuracy = sum(s.get('accuracy', 0) for s in sessions if s.get('accuracy', 0) > 0) / max(1, len([s for s in sessions if s.get('accuracy', 0) > 0]))
+    best_score = max((s.get('score', 0) for s in sessions), default=0)
+    best_combo = max((s.get('max_combo', 0) for s in sessions), default=0)
+    
+    # Recent performance trend
+    recent_sessions = sessions[:5]  # Last 5 sessions
+    recent_accuracy = [s.get('accuracy', 0) for s in recent_sessions if s.get('accuracy', 0) > 0]
+    
+    # Performance analysis
+    analysis = f"""
+    Total Sessions: {total_sessions}
+    Average Accuracy: {avg_accuracy:.1f}%
+    Best Score: {best_score}
+    Best Combo: {best_combo}
+    Recent Performance: {recent_accuracy}
+    
+    Performance Level: {"Beginner" if avg_accuracy < 60 else "Intermediate" if avg_accuracy < 80 else "Advanced"}
+    """
+    
+    return analysis
+
+
+def generate_fallback_response(user_message, performance_summary):
+    """Generate a fallback response when Gemini API is unavailable."""
+    message_lower = user_message.lower()
+    
+    if any(word in message_lower for word in ['improve', 'better', 'tips']):
+        return "🎯 Focus on these key areas:\n• Calibrate your poses regularly for better detection\n• Practice slower movements first, then build up speed\n• Watch your hand positioning - small adjustments make big differences\n• Take breaks to avoid fatigue affecting your accuracy"
+    
+    elif any(word in message_lower for word in ['accuracy', 'precise', 'miss']):
+        return "🎯 To improve accuracy:\n• Ensure good lighting and camera positioning\n• Make deliberate, confident pose changes\n• Practice the poses from the calibration screen\n• Focus on one pose at a time rather than rushing through sequences"
+    
+    elif any(word in message_lower for word in ['rhythm', 'timing', 'beat']):
+        return "🎵 For better rhythm:\n• Start with slower songs to build muscle memory\n• Listen carefully to the audio cues\n• Practice with the freestyle mode to get comfortable with pose transitions\n• Focus on smooth, flowing movements rather than jerky changes"
+    
+    else:
+        return "🤖 I'd love to give you personalized feedback! Try asking about specific areas like 'How can I improve my accuracy?' or 'What poses should I practice more?'\n\nGeneral tip: Regular practice with the calibration feature will significantly improve your performance!"
 
 
 @app.route('/results')

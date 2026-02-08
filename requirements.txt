@@ -4,3 +4,5 @@ numpy
 torch
 Flask
 pygame
+google-generativeai
+python-dotenv

@@ -118,7 +118,10 @@ const POSE_NOTES = {
 // Load video feed from backend (MJPEG stream)
 const video = document.getElementById('videoElement');
 
-// SIMPLIFIED AUDIO SYSTEM - Just create context and play tones
+// Piano samples - using Web Audio API to create piano-like sounds
+const pianoSamples = {};
+
+// PIANO AUDIO SYSTEM - Creates realistic piano sounds
 function initializeAudio() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -128,10 +131,66 @@ function initializeAudio() {
         soundEnabled = true;
         document.getElementById('enableSoundBtn').style.display = 'none';
         
-        // Test beep
-        playTone(440, 0.2);
-        showToast('🔊 Sound Enabled', 'Gestures will now play notes!');
+        // Load piano samples
+        loadPianoSamples();
+        
+        // Test sound
+        setTimeout(() => playPianoNote(440, 0.2), 100);
+        showToast('🎹 Piano Sound Enabled', 'Gestures will now play piano notes!');
     });
+}
+
+// Load piano samples (generate using additive synthesis for realistic piano sound)
+function loadPianoSamples() {
+    const notes = {
+        'E': 329.63,
+        'D': 293.66,
+        'C': 261.63
+    };
+    
+    // Pre-generate piano samples
+    for (const [name, freq] of Object.entries(notes)) {
+        pianoSamples[freq] = createPianoSample(freq);
+    }
+}
+
+// Create a piano-like sound using additive synthesis
+function createPianoSample(frequency) {
+    const sampleRate = audioContext.sampleRate;
+    const duration = 2.0; // 2 second sample
+    const length = sampleRate * duration;
+    const buffer = audioContext.createBuffer(1, length, sampleRate);
+    const data = buffer.getChannelData(0);
+    
+    // Piano has rich harmonic content - fundamental + harmonics
+    const harmonics = [
+        { freq: 1.0, amp: 1.0 },    // Fundamental
+        { freq: 2.0, amp: 0.5 },    // 2nd harmonic
+        { freq: 3.0, amp: 0.3 },    // 3rd harmonic
+        { freq: 4.0, amp: 0.2 },    // 4th harmonic
+        { freq: 5.0, amp: 0.1 },    // 5th harmonic
+        { freq: 6.0, amp: 0.05 }    // 6th harmonic
+    ];
+    
+    // Generate waveform with harmonics
+    for (let i = 0; i < length; i++) {
+        const t = i / sampleRate;
+        let sample = 0;
+        
+        // Add harmonics
+        for (const h of harmonics) {
+            sample += Math.sin(2 * Math.PI * frequency * h.freq * t) * h.amp;
+        }
+        
+        // Piano envelope: fast attack, gradual decay
+        const attack = Math.min(1, i / (sampleRate * 0.002)); // 2ms attack
+        const decay = Math.exp(-3 * t); // Exponential decay
+        const envelope = attack * decay;
+        
+        data[i] = sample * envelope * 0.3; // Normalize volume
+    }
+    
+    return buffer;
 }
 
 // Auto-start on page load
@@ -139,30 +198,35 @@ window.addEventListener('load', () => {
     startPosePolling();
 });
 
-// SIMPLE TONE PLAYER - No complex oscillator management
+// PIANO PLAYER - Plays realistic piano sounds
 function playTone(frequency, duration = 0.3) {
-    if (!audioContext || !soundEnabled) return;
+    playPianoNote(frequency, duration);
+}
 
+function playPianoNote(frequency, duration = 0.3) {
+    if (!audioContext || !soundEnabled) return;
+    
     const now = audioContext.currentTime;
     
-    // Create oscillator and gain
-    const oscillator = audioContext.createOscillator();
+    // Use pre-generated sample if available, otherwise create on the fly
+    let source = audioContext.createBufferSource();
+    if (pianoSamples[frequency]) {
+        source.buffer = pianoSamples[frequency];
+    } else {
+        source.buffer = createPianoSample(frequency);
+    }
+    
+    // Create gain node for volume control
     const gainNode = audioContext.createGain();
-    
-    // Setup oscillator
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(frequency, now);
-    
-    // Setup gain envelope (simple fade out)
-    gainNode.gain.setValueAtTime(0.3, now);
+    gainNode.gain.setValueAtTime(0.4, now);
     gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
     
     // Connect and play
-    oscillator.connect(gainNode);
+    source.connect(gainNode);
     gainNode.connect(audioContext.destination);
     
-    oscillator.start(now);
-    oscillator.stop(now + duration);
+    source.start(now);
+    source.stop(now + duration);
 }
 
 // Pose polling

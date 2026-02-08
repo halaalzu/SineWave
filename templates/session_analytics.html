@@ -1,0 +1,545 @@
+{% extends "base_cassette.html" %}
+
+{% block title %}FlowState - Session Analytics{% endblock %}
+
+{% block vertical_text %}PROGRESS{% endblock %}
+{% block right_vertical_text %}SESSIONS{% endblock %}
+
+{% block back_button %}
+<button onclick="window.location.href='/analytics'"
+    class="absolute top-[100px] left-4 md:left-8 z-10 bg-secondary border-4 border-foreground px-4 py-2 font-display text-lg tracking-widest text-secondary-foreground cursor-pointer btn-3d">
+    ◀ BACK
+</button>
+{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block cassette_content %}
+<div class="mb-6 mt-8">
+    <h1 class="font-display text-4xl md:text-5xl tracking-[0.25em] text-foreground leading-[0.9] mb-4">
+        SESSION<br />ANALYTICS
+    </h1>
+    <p class="text-sm font-bold tracking-wider text-muted-foreground mb-4">
+        COMPARE SESSIONS • TRACK PROGRESSION • MEASURE IMPROVEMENT
+    </p>
+</div>
+
+<!-- Session Selector -->
+<div class="bg-card border-4 border-foreground p-4 mb-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+    <div class="flex items-center justify-between mb-3">
+        <div class="font-display text-sm tracking-widest text-foreground/70">📅 SELECT SESSION</div>
+        <button onclick="loadSessions()" class="text-xs px-3 py-1 bg-secondary border-2 border-foreground">REFRESH</button>
+    </div>
+    <select id="sessionSelect" onchange="loadSessionComparison()" 
+            class="w-full p-3 bg-background border-4 border-foreground font-mono text-sm">
+        <option value="">Loading sessions...</option>
+    </select>
+</div>
+
+<div id="loadingState" class="bg-card border-4 border-foreground p-12 text-center" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+    <div class="font-display text-2xl tracking-widest text-foreground/50">LOADING...</div>
+</div>
+
+<div id="dataView" class="hidden">
+    <!-- Quality Score Card -->
+    <div class="bg-gradient-to-br from-green-500 to-emerald-700 border-4 border-foreground p-6 mb-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="text-white/80 text-xs font-bold mb-2">🎯 SESSION QUALITY SCORE</div>
+        <div class="flex items-end gap-4">
+            <div class="text-white text-6xl font-display tracking-wider" id="qualityScore">--</div>
+            <div class="text-white text-3xl font-display mb-2">/100</div>
+        </div>
+        <div class="text-white/70 text-sm mt-2" id="qualityLabel">Calculating...</div>
+        <div class="mt-4 grid grid-cols-4 gap-2 text-xs text-white/90">
+            <div>
+                <div class="font-bold" id="sessionFrames">--</div>
+                <div class="text-white/60">Frames</div>
+            </div>
+            <div>
+                <div class="font-bold" id="sessionDuration">--</div>
+                <div class="text-white/60">Seconds</div>
+            </div>
+            <div>
+                <div class="font-bold" id="sessionSpeed">--</div>
+                <div class="text-white/60">Avg Speed</div>
+            </div>
+            <div>
+                <div class="font-bold" id="sessionSmoothness">--</div>
+                <div class="text-white/60">Smoothness</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hand Joint Visualization -->
+    <div class="bg-card border-4 border-foreground p-6 mb-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="font-display text-sm tracking-widest text-foreground/70 mb-4">🖐️ HAND JOINT ANALYSIS</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Hand Diagram -->
+            <div class="flex items-center justify-center bg-background border-2 border-foreground/20 p-4">
+                <svg id="handDiagram" viewBox="0 0 300 400" class="w-full max-w-sm">
+                    <!-- Wrist -->
+                    <circle cx="150" cy="350" r="8" class="joint" data-joint="0" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Thumb -->
+                    <line x1="150" y1="350" x2="110" y2="320" stroke="#475569" stroke-width="3"/>
+                    <circle cx="110" cy="320" r="6" class="joint" data-joint="1" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="110" y1="320" x2="85" y2="280" stroke="#475569" stroke-width="3"/>
+                    <circle cx="85" cy="280" r="6" class="joint" data-joint="2" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="85" y1="280" x2="70" y2="240" stroke="#475569" stroke-width="3"/>
+                    <circle cx="70" cy="240" r="6" class="joint" data-joint="3" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="70" y1="240" x2="60" y2="200" stroke="#475569" stroke-width="3"/>
+                    <circle cx="60" cy="200" r="6" class="joint" data-joint="4" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Index -->
+                    <line x1="150" y1="350" x2="120" y2="290" stroke="#475569" stroke-width="3"/>
+                    <circle cx="120" cy="290" r="6" class="joint" data-joint="5" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="120" y1="290" x2="110" y2="220" stroke="#475569" stroke-width="3"/>
+                    <circle cx="110" cy="220" r="6" class="joint" data-joint="6" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="110" y1="220" x2="105" y2="150" stroke="#475569" stroke-width="3"/>
+                    <circle cx="105" cy="150" r="6" class="joint" data-joint="7" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="105" y1="150" x2="100" y2="80" stroke="#475569" stroke-width="3"/>
+                    <circle cx="100" cy="80" r="6" class="joint" data-joint="8" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Middle -->
+                    <line x1="150" y1="350" x2="150" y2="280" stroke="#475569" stroke-width="3"/>
+                    <circle cx="150" cy="280" r="6" class="joint" data-joint="9" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="150" y1="280" x2="150" y2="200" stroke="#475569" stroke-width="3"/>
+                    <circle cx="150" cy="200" r="6" class="joint" data-joint="10" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="150" y1="200" x2="150" y2="120" stroke="#475569" stroke-width="3"/>
+                    <circle cx="150" cy="120" r="6" class="joint" data-joint="11" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="150" y1="120" x2="150" y2="40" stroke="#475569" stroke-width="3"/>
+                    <circle cx="150" cy="40" r="6" class="joint" data-joint="12" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Ring -->
+                    <line x1="150" y1="350" x2="180" y2="290" stroke="#475569" stroke-width="3"/>
+                    <circle cx="180" cy="290" r="6" class="joint" data-joint="13" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="180" y1="290" x2="190" y2="220" stroke="#475569" stroke-width="3"/>
+                    <circle cx="190" cy="220" r="6" class="joint" data-joint="14" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="190" y1="220" x2="195" y2="150" stroke="#475569" stroke-width="3"/>
+                    <circle cx="195" cy="150" r="6" class="joint" data-joint="15" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="195" y1="150" x2="200" y2="80" stroke="#475569" stroke-width="3"/>
+                    <circle cx="200" cy="80" r="6" class="joint" data-joint="16" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Pinky -->
+                    <line x1="150" y1="350" x2="210" y2="320" stroke="#475569" stroke-width="3"/>
+                    <circle cx="210" cy="320" r="6" class="joint" data-joint="17" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="210" y1="320" x2="230" y2="260" stroke="#475569" stroke-width="3"/>
+                    <circle cx="230" cy="260" r="6" class="joint" data-joint="18" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="230" y1="260" x2="240" y2="200" stroke="#475569" stroke-width="3"/>
+                    <circle cx="240" cy="200" r="6" class="joint" data-joint="19" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                    <line x1="240" y1="200" x2="250" y2="150" stroke="#475569" stroke-width="3"/>
+                    <circle cx="250" cy="150" r="6" class="joint" data-joint="20" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                </svg>
+            </div>
+            
+            <!-- Joint Metrics List -->
+            <div id="jointMetricsList" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="text-xs text-foreground/50 mb-3">Loading joint data...</div>
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="mt-4 flex gap-4 text-xs">
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded-full bg-green-500 border-2 border-foreground"></div>
+                <span>Excellent (80+)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded-full bg-yellow-500 border-2 border-foreground"></div>
+                <span>Good (60-79)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded-full bg-red-500 border-2 border-foreground"></div>
+                <span>Needs Work (&lt;60)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparison Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Compare to Baseline -->
+        <div class="bg-gradient-to-br from-blue-500 to-blue-700 border-4 border-foreground p-4" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+            <div class="text-white/80 text-xs font-bold mb-2">vs. BASELINE (First Session)</div>
+            <div class="text-white text-4xl font-display tracking-wider mb-1" id="baselineImprovement">+0%</div>
+            <div class="text-white/70 text-xs">Overall Improvement</div>
+            <div class="mt-3 space-y-1">
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Smoothness:</span>
+                    <span id="baselineSmoothness" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Tremor:</span>
+                    <span id="baselineTremor" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Speed:</span>
+                    <span id="baselineSpeed" class="font-bold">--</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compare to Best -->
+        <div class="bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-foreground p-4" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+            <div class="text-white/80 text-xs font-bold mb-2">vs. PERSONAL BEST</div>
+            <div class="text-white text-4xl font-display tracking-wider mb-1" id="bestComparison">0%</div>
+            <div class="text-white/70 text-xs">Of Your Best Performance</div>
+            <div class="mt-3" id="personalBestBadge"></div>
+            <div class="mt-2 space-y-1">
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Smoothness:</span>
+                    <span id="bestSmoothness" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Tremor:</span>
+                    <span id="bestTremor" class="font-bold">--</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compare to Previous -->
+        <div class="bg-gradient-to-br from-green-500 to-green-700 border-4 border-foreground p-4" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+            <div class="text-white/80 text-xs font-bold mb-2">vs. PREVIOUS SESSION</div>
+            <div class="text-white text-4xl font-display tracking-wider mb-1" id="previousImprovement">+0%</div>
+            <div class="text-white/70 text-xs">Recent Progress</div>
+            <div class="mt-3 space-y-1">
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Smoothness:</span>
+                    <span id="previousSmoothness" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Tremor:</span>
+                    <span id="previousTremor" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between text-white/90 text-xs">
+                    <span>Speed:</span>
+                    <span id="previousSpeed" class="font-bold">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progression Chart -->
+    <div class="bg-card border-4 border-foreground p-6 mb-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="font-display text-sm tracking-widest text-foreground/70 mb-4">📈 PROGRESSION OVER TIME</div>
+        <canvas id="progressionChart" height="80"></canvas>
+    </div>
+
+    <!-- Weekly Summary -->
+    <div class="bg-card border-4 border-foreground p-6" style="box-shadow: 6px 6px 0 hsl(0, 0%, 10%);">
+        <div class="font-display text-sm tracking-widest text-foreground/70 mb-4">📊 WEEKLY SUMMARY</div>
+        <div id="weeklySummary" class="space-y-3"></div>
+    </div>
+</div>
+
+<script>
+let sessions = [];
+let currentSessionId = null;
+let progressionChart = null;
+
+async function loadSessions() {
+    try {
+        const response = await fetch('/api/user/default_user/sessions?days=90');
+        const data = await response.json();
+        sessions = data.sessions || [];
+        
+        const select = document.getElementById('sessionSelect');
+        select.innerHTML = sessions.length > 0
+            ? sessions.map(s => `
+                <option value="${s.session_id}">
+                    ${new Date(s.start_time).toLocaleString()} - ${s.frames || 0} frames
+                </option>
+            `).join('')
+            : '<option value="">No sessions found</option>';
+        
+        if (sessions.length > 0) {
+            currentSessionId = sessions[0].session_id;
+            loadSessionComparison();
+        }
+    } catch (error) {
+        console.error('Error loading sessions:', error);
+    }
+}
+
+async function loadSessionComparison() {
+    const select = document.getElementById('sessionSelect');
+    currentSessionId = select.value;
+    
+    if (!currentSessionId) return;
+    
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('dataView').classList.add('hidden');
+    
+    try {
+        const [detailedAnalytics, comparison, progression, weekly] = await Promise.all([
+            fetch(`/api/session/${currentSessionId}/detailed-analytics`).then(r => r.json()),
+            fetch(`/api/session/${currentSessionId}/comparison?user_id=default_user`).then(r => r.json()),
+            fetch('/api/user/default_user/progression?window=5').then(r => r.json()),
+            fetch('/api/user/default_user/weekly-summary').then(r => r.json())
+        ]);
+        
+        displayDetailedAnalytics(detailedAnalytics);
+        displayComparison(comparison);
+        displayProgression(progression);
+        displayWeeklySummary(weekly);
+        
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('dataView').classList.remove('hidden');
+    } catch (error) {
+        console.error('Error loading comparison:', error);
+        document.getElementById('loadingState').innerHTML = `
+            <div class="text-red-500 font-mono">ERROR: ${error.message}</div>
+        `;
+    }
+}
+
+function displayDetailedAnalytics(data) {
+    if (data.error) {
+        console.error('Error loading detailed analytics:', data.error);
+        return;
+    }
+    
+    // Display quality score
+    const score = data.quality_score || 0;
+    document.getElementById('qualityScore').textContent = score;
+    
+    let label = 'Needs Improvement';
+    if (score >= 80) label = 'Excellent! 🌟';
+    else if (score >= 60) label = 'Good Progress 👍';
+    else if (score >= 40) label = 'Keep Practicing 💪';
+    
+    document.getElementById('qualityLabel').textContent = label;
+    
+    // Display session metrics
+    document.getElementById('sessionFrames').textContent = data.total_frames || 0;
+    document.getElementById('sessionDuration').textContent = data.duration ? data.duration.toFixed(1) : '--';
+    document.getElementById('sessionSpeed').textContent = data.overall_metrics.avg_speed.toFixed(3);
+    document.getElementById('sessionSmoothness').textContent = data.overall_metrics.smoothness.toFixed(1);
+    
+    // Update hand diagram and joint list
+    if (data.joint_analytics) {
+        updateHandDiagram(data.joint_analytics);
+        displayJointMetrics(data.joint_analytics);
+    }
+}
+
+function updateHandDiagram(jointAnalytics) {
+    const joints = document.querySelectorAll('.joint');
+    
+    const jointNames = [
+        "Wrist", "Thumb CMC", "Thumb MCP", "Thumb IP", "Thumb Tip",
+        "Index MCP", "Index PIP", "Index DIP", "Index Tip",
+        "Middle MCP", "Middle PIP", "Middle DIP", "Middle Tip",
+        "Ring MCP", "Ring PIP", "Ring DIP", "Ring Tip",
+        "Pinky MCP", "Pinky PIP", "Pinky DIP", "Pinky Tip"
+    ];
+    
+    joints.forEach((joint, idx) => {
+        const jointName = jointNames[idx];
+        const analytics = jointAnalytics[jointName];
+        
+        if (analytics) {
+            const score = analytics.score;
+            let color = '#ef4444'; // red
+            if (score >= 80) color = '#22c55e'; // green
+            else if (score >= 60) color = '#eab308'; // yellow
+            
+            joint.setAttribute('fill', color);
+            
+            // Add tooltip
+            joint.innerHTML = `<title>${jointName}: ${score.toFixed(1)}/100</title>`;
+        }
+    });
+}
+
+function displayJointMetrics(jointAnalytics) {
+    const container = document.getElementById('jointMetricsList');
+    
+    const sortedJoints = Object.entries(jointAnalytics)
+        .sort((a, b) => b[1].score - a[1].score);
+    
+    container.innerHTML = sortedJoints.map(([name, metrics]) => {
+        const scoreColor = metrics.score >= 80 ? 'text-green-600' : 
+                          metrics.score >= 60 ? 'text-yellow-600' : 'text-red-600';
+        
+        return `
+            <div class="bg-background border-2 border-foreground/20 p-3 text-xs">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="font-bold">${name}</span>
+                    <span class="${scoreColor} font-bold text-sm">${metrics.score.toFixed(1)}/100</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-foreground/70">
+                    <div>
+                        <div class="text-[10px] text-foreground/50">Smoothness</div>
+                        <div class="font-mono">${metrics.smoothness.toFixed(1)}</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-foreground/50">Tremor</div>
+                        <div class="font-mono">${metrics.tremor.toFixed(4)}</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-foreground/50">Range</div>
+                        <div class="font-mono">${metrics.range_of_motion.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displayComparison(data) {
+    // Baseline comparison
+    if (data.baseline_comparison && !data.baseline_comparison.error) {
+        const bc = data.baseline_comparison;
+        const avgImprovement = (
+            bc.improvements.smoothness +
+            bc.improvements.tremor +
+            bc.improvements.speed
+        ) / 3;
+        
+        document.getElementById('baselineImprovement').textContent = 
+            `${avgImprovement > 0 ? '+' : ''}${avgImprovement.toFixed(1)}%`;
+        document.getElementById('baselineSmoothness').textContent = 
+            `${bc.improvements.smoothness > 0 ? '+' : ''}${bc.improvements.smoothness.toFixed(1)}%`;
+        document.getElementById('baselineTremor').textContent = 
+            `${bc.improvements.tremor > 0 ? '+' : ''}${bc.improvements.tremor.toFixed(1)}%`;
+        document.getElementById('baselineSpeed').textContent = 
+            `${bc.improvements.speed > 0 ? '+' : ''}${bc.improvements.speed.toFixed(1)}%`;
+    }
+    
+    // Best comparison
+    if (data.best_comparison && !data.best_comparison.error) {
+        const best = data.best_comparison;
+        const avgBest = (best.comparison.smoothness + best.comparison.tremor) / 2;
+        
+        document.getElementById('bestComparison').textContent = `${avgBest.toFixed(0)}%`;
+        document.getElementById('bestSmoothness').textContent = `${best.comparison.smoothness.toFixed(0)}%`;
+        document.getElementById('bestTremor').textContent = `${best.comparison.tremor.toFixed(0)}%`;
+        
+        if (best.is_personal_best) {
+            document.getElementById('personalBestBadge').innerHTML = 
+                '<div class="inline-block px-2 py-1 bg-yellow-400 text-yellow-900 text-xs font-bold">🏆 PERSONAL BEST!</div>';
+        }
+    }
+    
+    // Previous comparison
+    if (data.previous_comparison && !data.previous_comparison.error) {
+        const prev = data.previous_comparison;
+        const avgPrev = (
+            prev.improvements.smoothness +
+            prev.improvements.tremor +
+            prev.improvements.speed
+        ) / 3;
+        
+        document.getElementById('previousImprovement').textContent = 
+            `${avgPrev > 0 ? '+' : ''}${avgPrev.toFixed(1)}%`;
+        document.getElementById('previousSmoothness').textContent = 
+            `${prev.improvements.smoothness > 0 ? '+' : ''}${prev.improvements.smoothness.toFixed(1)}%`;
+        document.getElementById('previousTremor').textContent = 
+            `${prev.improvements.tremor > 0 ? '+' : ''}${prev.improvements.tremor.toFixed(1)}%`;
+        document.getElementById('previousSpeed').textContent = 
+            `${prev.improvements.speed > 0 ? '+' : ''}${prev.improvements.speed.toFixed(1)}%`;
+    }
+}
+
+function displayProgression(data) {
+    if (data.error || !data.raw_sessions) {
+        return;
+    }
+    
+    const ctx = document.getElementById('progressionChart').getContext('2d');
+    
+    if (progressionChart) {
+        progressionChart.destroy();
+    }
+    
+    const labels = data.raw_sessions.map(s => new Date(s.start_time).toLocaleDateString());
+    const smoothness = data.raw_sessions.map(s => s.smoothness);
+    const tremor = data.raw_sessions.map(s => s.tremor * 1000); // Scale for visibility
+    const speed = data.raw_sessions.map(s => s.avg_speed * 100);
+    
+    progressionChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Smoothness',
+                    data: smoothness,
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4
+                },
+                {
+                    label: 'Tremor (x1000)',
+                    data: tremor,
+                    borderColor: 'rgb(239, 68, 68)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    tension: 0.4
+                },
+                {
+                    label: 'Speed (x100)',
+                    data: speed,
+                    borderColor: 'rgb(34, 197, 94)',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function displayWeeklySummary(data) {
+    const container = document.getElementById('weeklySummary');
+    
+    if (!data.weekly_data || data.weekly_data.length === 0) {
+        container.innerHTML = '<div class="text-foreground/50">No weekly data yet</div>';
+        return;
+    }
+    
+    container.innerHTML = data.weekly_data.slice(-4).reverse().map(week => `
+        <div class="p-4 bg-background border-2 border-foreground">
+            <div class="flex justify-between items-center mb-2">
+                <div class="font-display text-sm text-foreground">${week.week}</div>
+                <div class="text-xs text-foreground/60">${week.session_count} sessions</div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                    <div class="text-foreground/60">Smoothness</div>
+                    <div class="font-mono font-bold">${week.avg_smoothness.toFixed(0)}</div>
+                </div>
+                <div>
+                    <div class="text-foreground/60">Duration</div>
+                    <div class="font-mono font-bold">${week.total_duration_minutes.toFixed(0)}m</div>
+                </div>
+                <div>
+                    <div class="text-foreground/60">Consistency</div>
+                    <div class="font-mono font-bold">${week.consistency_score.toFixed(0)}%</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Load on page load
+window.addEventListener('load', () => {
+    loadSessions();
+});
+</script>
+
+{% endblock %}

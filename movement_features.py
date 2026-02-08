@@ -318,15 +318,18 @@ class SessionRecorder:
             'events': self.session_events
         }
         
-        # Compute average features
-        velocities = [f['features'].get('velocity', {}).get('mean_speed', 0) 
-                     for f in self.frame_data if f['features'].get('velocity', {}).get('mean_speed') is not None]
+        # Compute average features - filter out frames with None features
+        velocities = [f.get('features', {}).get('velocity', {}).get('mean_speed', 0) 
+                     for f in self.frame_data 
+                     if f.get('features') is not None and f.get('features', {}).get('velocity', {}).get('mean_speed') is not None]
         
-        smoothness_scores = [f['features'].get('smoothness', 0) 
-                            for f in self.frame_data if f['features'].get('smoothness') is not None]
+        smoothness_scores = [f.get('features', {}).get('smoothness', 0) 
+                            for f in self.frame_data 
+                            if f.get('features') is not None and f.get('features', {}).get('smoothness') is not None]
         
-        tremor_scores = [f['features'].get('tremor_score', 0) 
-                        for f in self.frame_data if f['features'].get('tremor_score') is not None]
+        tremor_scores = [f.get('features', {}).get('tremor_score', 0) 
+                        for f in self.frame_data 
+                        if f.get('features') is not None and f.get('features', {}).get('tremor_score') is not None]
         
         if velocities:
             summary['avg_speed'] = float(np.mean(velocities))

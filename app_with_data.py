@@ -14,6 +14,19 @@ import torch
 import torch.nn as nn
 from threading import Thread
 from dotenv import load_dotenv
+import logging
+import sys
+
+# Configure logging for production stability
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('flowstate.log')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +36,7 @@ from database import RehabDatabase
 from joint_analysis import JointAnalyzer
 from gemini_analyzer import GeminiHandAnalyzer
 from session_quality_ml import SessionQualityAnalyzer
+from session_comparison import SessionComparison
 
 # Import pygame for sound feedback
 try:
@@ -56,6 +70,14 @@ try:
 except Exception as e:
     print(f"⚠️  Gemini AI not available: {e}")
     gemini_analyzer = None
+
+# Initialize Session Comparison
+try:
+    session_comparison = SessionComparison('flowstate.db')
+    print("✅ Session Comparison initialized successfully")
+except Exception as e:
+    print(f"⚠️  Session Comparison not available: {e}")
+    session_comparison = None
 
 # Hand landmark connections for drawing
 HAND_CONNECTIONS = [
@@ -498,24 +520,36 @@ except:
 
 def generate_frames():
     """Generate frames for video streaming AND update shared detection state."""
+    import gc
     global latest_detection
     frame_timestamp_ms = 0  # Each stream has its own timestamp
+    frame_count = 0  # Track frames for memory management
     
     while True:
-        success, frame = camera.read()
-        if not success:
-            # Don't break - just skip this frame and continue
+        try:
+            success, frame = camera.read()
+            if not success:
+                # Don't break - just skip this frame and continue
+                continue
+            
+            # Process frame with hand tracking and data collection
+            frame = tracker.process_frame(frame, frame_timestamp_ms)
+            frame_timestamp_ms += 33  # ~30 FPS
+            frame_count += 1
+            
+            # Update shared detection state (so /api/current_pose doesn't need to read from camera)
+            with detection_lock:
+                latest_detection['pose'] = tracker.current_pose
+                latest_detection['confidence'] = tracker.pose_confidence
+                latest_detection['frame_count'] += 1
+                
+            # Memory management - clean up every 100 frames
+            if frame_count % 100 == 0:
+                gc.collect()
+                
+        except Exception as e:
+            logger.error(f"Error in frame generation: {e}")
             continue
-        
-        # Process frame with hand tracking and data collection
-        frame = tracker.process_frame(frame, frame_timestamp_ms)
-        frame_timestamp_ms += 33  # ~30 FPS
-        
-        # Update shared detection state (so /api/current_pose doesn't need to read from camera)
-        with detection_lock:
-            latest_detection['pose'] = tracker.current_pose
-            latest_detection['confidence'] = tracker.pose_confidence
-            latest_detection['frame_count'] += 1
             
             # Update landmarks and handedness if available
             if hasattr(tracker, 'last_landmarks'):
@@ -550,6 +584,11 @@ def freestyle():
 def analytics():
     """Render the analytics page."""
     return render_template('analytics.html')
+
+@app.route('/session-analytics')
+def session_analytics():
+    """Render the session comparison analytics page."""
+    return render_template('session_analytics.html')
 
 @app.route('/hand-comparison')
 def hand_comparison():
@@ -707,11 +746,139 @@ def gemini_latest_session_feedback(user_id):
     result = gemini_analyzer.analyze_session(session_id, user_id)
     return jsonify(result)
 
-@app.route('/api/user/<user_id>/sessions')
-def user_sessions(user_id):
-    """Get user sessions"""
-    sessions = db.get_user_sessions(user_id, limit=10)
-    return jsonify(sessions)
+@app.route('/api/session/<session_id>/detailed-analytics')
+def session_detailed_analytics(session_id):
+    """Get comprehensive session analytics with quality score and joint analysis"""
+    try:
+        if not db or not db.conn:
+            logger.error("Database connection not available")
+            return jsonify({'error': 'Database not available'}), 500
+            
+        cursor = db.conn.cursor()
+        
+        # Get session info with error handling
+        try:
+            cursor.execute('''
+                SELECT session_id, user_id, start_time, end_time, duration_seconds,
+                       total_frames, avg_speed, max_speed, avg_smoothness, avg_tremor
+                FROM sessions WHERE session_id = ?
+            ''', (session_id,))
+            
+            session = cursor.fetchone()
+        except Exception as db_error:
+            logger.error(f"Database query error for session {session_id}: {db_error}")
+            return jsonify({'error': 'Database query failed'}), 500
+        if not session:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        # Calculate quality score using ML model or fallback to heuristic
+        quality_score = 0
+        if quality_analyzer:
+            try:
+                score = quality_analyzer.score_session(session_id)
+                quality_score = int(score * 100) if score else 0
+            except:
+                quality_score = 0
+        
+        # Fallback: Calculate quality from session metrics if ML fails
+        if quality_score == 0 and session[8] and session[9]:  # Has smoothness and tremor
+            smoothness_score = min(session[8] / 30, 1) * 40  # Smoothness out of 40
+            tremor_score = max(0, 1 - (session[9] * 1000)) * 30  # Tremor out of 30
+            speed_score = min(session[6] * 20, 30) if session[6] else 0  # Speed out of 30
+            quality_score = int(smoothness_score + tremor_score + speed_score)
+        
+        # Get joint-level analytics from movement_timeseries
+        cursor.execute('''
+            SELECT landmark_positions, joint_angles, velocity_mean, smoothness_score, tremor_score
+            FROM movement_timeseries 
+            WHERE session_id = ? AND landmark_positions IS NOT NULL
+            ORDER BY frame_number
+        ''', (session_id,))
+        
+        frames = cursor.fetchall()
+        
+        # Analyze each hand joint (21 landmarks per hand)
+        joint_analytics = {}
+        joint_names = [
+            "Wrist", "Thumb CMC", "Thumb MCP", "Thumb IP", "Thumb Tip",
+            "Index MCP", "Index PIP", "Index DIP", "Index Tip",
+            "Middle MCP", "Middle PIP", "Middle DIP", "Middle Tip",
+            "Ring MCP", "Ring PIP", "Ring DIP", "Ring Tip",
+            "Pinky MCP", "Pinky PIP", "Pinky DIP", "Pinky Tip"
+        ]
+        
+        if frames:
+            # Calculate per-joint metrics
+            for joint_idx in range(21):
+                positions = []
+                
+                for frame_idx, frame in enumerate(frames):
+                    try:
+                        landmarks = json.loads(frame[0]) if frame[0] else []
+                        
+                        if landmarks and len(landmarks) > joint_idx:
+                            pos = landmarks[joint_idx]
+                            if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                                positions.append([float(pos[0]), float(pos[1])])
+                    except Exception as e:
+                        continue
+                
+                if positions and len(positions) > 10:
+                    # Calculate joint metrics
+                    positions_arr = np.array(positions)
+                    smoothness = 0
+                    tremor = 0
+                    range_of_motion = 0
+                    
+                    # Range of motion (total distance traveled)
+                    diffs = np.diff(positions_arr, axis=0)
+                    distances = np.sqrt(np.sum(diffs**2, axis=1))
+                    range_of_motion = float(np.sum(distances))
+                    
+                    # Smoothness (inverse of jerk - lower jerk = smoother)
+                    if len(distances) > 1:
+                        jerk = np.abs(np.diff(distances))
+                        avg_jerk = float(np.mean(jerk))
+                        smoothness = max(0, 100 - (avg_jerk * 10000))
+                    
+                    # Tremor (variation in movement)
+                    if len(distances) > 10:
+                        tremor = float(np.std(distances))
+                    
+                    # Calculate overall joint score (0-100)
+                    # Higher smoothness = better, lower tremor = better, reasonable ROM = better
+                    tremor_score = max(0, 100 - (tremor * 1000))
+                    rom_score = min(range_of_motion * 50, 50)  # Cap at 50 points
+                    joint_score = (smoothness * 0.4) + (tremor_score * 0.4) + (rom_score * 0.2)
+                    
+                    joint_analytics[joint_names[joint_idx]] = {
+                        'smoothness': round(smoothness, 1),
+                        'tremor': round(tremor, 4),
+                        'range_of_motion': round(range_of_motion, 2),
+                        'score': round(min(joint_score, 100), 1),
+                        'status': 'excellent' if joint_score >= 80 else 'good' if joint_score >= 60 else 'needs_improvement'
+                    }
+        
+        result = {
+            'session_id': session[0],
+            'user_id': session[1],
+            'start_time': session[2],
+            'duration': session[4],
+            'total_frames': session[5],
+            'quality_score': quality_score,
+            'overall_metrics': {
+                'avg_speed': round(session[6], 4) if session[6] else 0,
+                'max_speed': round(session[7], 4) if session[7] else 0,
+                'smoothness': round(session[8], 2) if session[8] else 0,
+                'tremor': round(session[9], 6) if session[9] else 0
+            },
+            'joint_analytics': joint_analytics
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/session/<session_id>/data')
 def session_data(session_id):
@@ -1099,6 +1266,102 @@ def gemini_chat():
             'context_used': bool(session_row or joint_analysis)
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Session Comparison API Endpoints
+@app.route('/api/session/<session_id>/comparison')
+def get_session_comparison(session_id):
+    """Get comprehensive session comparison"""
+    try:
+        user_id = request.args.get('user_id', 'default_user')
+        
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        analytics = session_comparison.get_session_analytics(session_id, user_id)
+        return jsonify(analytics)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/<user_id>/progression')
+def get_progression(user_id):
+    """Get progression trends for user"""
+    try:
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        window_size = int(request.args.get('window', 5))
+        trends = session_comparison.get_progression_trends(user_id, window_size)
+        return jsonify(trends)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/<user_id>/weekly-summary')
+def get_weekly_summary(user_id):
+    """Get weekly aggregated metrics"""
+    try:
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        summary = session_comparison.get_weekly_summary(user_id)
+        return jsonify({'weekly_data': summary})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/session/<session_id>/compare-to-baseline')
+def compare_to_baseline(session_id):
+    """Compare session to user's baseline (first session)"""
+    try:
+        user_id = request.args.get('user_id', 'default_user')
+        
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        comparison = session_comparison.compare_to_baseline(session_id, user_id)
+        return jsonify(comparison)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/session/<session_id>/compare-to-best')
+def compare_to_best(session_id):
+    """Compare session to user's best session"""
+    try:
+        user_id = request.args.get('user_id', 'default_user')
+        
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        comparison = session_comparison.compare_to_best(session_id, user_id)
+        return jsonify(comparison)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sessions')
+def get_sessions():
+    """Get list of all sessions (for default user)"""
+    try:
+        if not session_comparison:
+            return jsonify([])
+        
+        days = int(request.args.get('days', 90))
+        sessions = session_comparison.get_user_sessions('default_user', days)
+        return jsonify(sessions)
+    except Exception as e:
+        logger.error(f"Error getting sessions: {e}")
+        return jsonify([])
+
+@app.route('/api/user/<user_id>/sessions')
+def get_user_sessions_list(user_id):
+    """Get list of all sessions for user"""
+    try:
+        if not session_comparison:
+            return jsonify({'error': 'Session comparison not available'}), 503
+        
+        days = int(request.args.get('days', 90))
+        sessions = session_comparison.get_user_sessions(user_id, days)
+        return jsonify({'sessions': sessions})
+    except Exception as e:
+        logger.error(f"Error getting user sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

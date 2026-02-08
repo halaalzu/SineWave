@@ -1,6 +1,6 @@
 mediapipe
 opencv-python
-numpytorch
-flask
-flask-cors
-google-generativeai
+numpy
+torch
+Flask
+pygame

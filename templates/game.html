@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlowState - Freestyle</title>
+    <title>FlowState - {{ song_title }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -38,12 +38,12 @@
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 1.5rem; padding: 0 1rem;
         }
-        .mode-info { text-align: left; }
-        .mode-label {
+        .song-info { text-align: left; }
+        .song-label {
             font-size: 11px; font-weight: 600; text-transform: uppercase;
             letter-spacing: 2px; color: rgba(250, 204, 21, 0.4);
         }
-        .current-mode {
+        .current-song {
             font-size: 1.3rem; font-weight: 700;
             background: linear-gradient(135deg, #fde68a, #fbbf24, #c4b5fd);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
@@ -95,11 +95,11 @@
 
     <div class="container">
         <div class="game-header">
-            <div class="mode-info">
-                <div class="mode-label">Mode</div>
-                <div class="current-mode">Freestyle</div>
+            <div class="song-info">
+                <div class="song-label">Now Playing</div>
+                <div class="current-song">{{ song_title }}</div>
             </div>
-            <a href="{{ url_for('home') }}" class="back-button"><span>← Back to Home</span></a>
+            <a href="{{ url_for('song_selection') }}" class="back-button"><span>← Change Song</span></a>
         </div>
 
         <div class="video-container">
@@ -107,9 +107,21 @@
         </div>
 
         <div class="info">
-            <p>Hold any pose to play its musical note!</p>
-            <p style="opacity: 0.7; font-size: 0.85rem;">Palm=F · 1 Finger=C · 2 Fingers=D · 3 Fingers=E · Fist=G</p>
+            <p>Match the hand poses as they reach the hit zone!</p>
         </div>
     </div>
+
+    <script>
+        const statusInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/song_status');
+                const data = await res.json();
+                if (data.complete) {
+                    clearInterval(statusInterval);
+                    window.location.href = '/results?session_id=' + data.session_id;
+                }
+            } catch (e) { /* ignore transient errors */ }
+        }, 500);
+    </script>
 </body>
 </html>

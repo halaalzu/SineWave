@@ -1,323 +1,310 @@
 """
-Database schemas and management for rehabilitation tracking
-Supports both SQLite (local) and PostgreSQL (production)
+FlowState Rehab — Database Module
+==================================
+SQLite storage for sessions, per-note joint deviation data, and ideal poses.
 """
 
 import sqlite3
 import json
-from datetime import datetime
-from pathlib import Path
+import os
+import time
+from contextlib import contextmanager
 
-class RehabDatabase:
-    """Database manager for rehabilitation tracking data"""
-    
-    def __init__(self, db_path='flowstate.db'):
-        """Initialize database connection"""
-        self.db_path = db_path
-        self.conn = None
-        self.setup_database()
-    
-    def setup_database(self):
-        """Create database tables if they don't exist"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row  # Enable column access by name
-        
-        cursor = self.conn.cursor()
-        
-        # Users table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                diagnosis TEXT,
-                rehab_stage TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                notes TEXT
-            )
-        ''')
-        
-        # Sessions table (metadata)
-        cursor.execute('''
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flowstate_rehab.db")
+
+# 21 MediaPipe hand landmark names (index matches landmark ID)
+LANDMARK_NAMES = [
+    "WRIST",
+    "THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",
+    "INDEX_FINGER_MCP", "INDEX_FINGER_PIP", "INDEX_FINGER_DIP", "INDEX_FINGER_TIP",
+    "MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP",
+    "RING_FINGER_MCP", "RING_FINGER_PIP", "RING_FINGER_DIP", "RING_FINGER_TIP",
+    "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP",
+]
+
+
+@contextmanager
+def get_db():
+    """Context manager for database connections."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db():
+    """Create all tables if they don't exist."""
+    with get_db() as conn:
+        conn.executescript("""
+            -- Sessions: one row per song play-through
             CREATE TABLE IF NOT EXISTS sessions (
-                session_id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
-                level_name TEXT NOT NULL,
-                start_time TIMESTAMP NOT NULL,
-                end_time TIMESTAMP,
-                duration_seconds REAL,
-                total_frames INTEGER,
-                stars_earned INTEGER DEFAULT 0,
-                completed BOOLEAN DEFAULT 0,
-                avg_speed REAL,
-                max_speed REAL,
-                avg_smoothness REAL,
-                avg_tremor REAL,
-                notes TEXT,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        
-        # Time series data table (detailed frame-by-frame)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS movement_timeseries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                timestamp_ms INTEGER NOT NULL,
-                frame_number INTEGER,
-                landmark_positions TEXT,
-                joint_angles TEXT,
-                hand_openness REAL,
-                velocity_mean REAL,
-                velocity_max REAL,
-                acceleration_mean REAL,
-                smoothness_score REAL,
-                tremor_score REAL,
-                range_of_motion REAL,
-                event_type TEXT,
-                FOREIGN KEY (session_id) REFERENCES sessions (session_id)
-            )
-        ''')
-        
-        # Create index for faster time series queries
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_timeseries_session 
-            ON movement_timeseries(session_id, timestamp_ms)
-        ''')
-        
-        # Session events table (markers like pose_start, pose_complete)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS session_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                timestamp TIMESTAMP NOT NULL,
-                event_type TEXT NOT NULL,
-                event_data TEXT,
-                FOREIGN KEY (session_id) REFERENCES sessions (session_id)
-            )
-        ''')
-        
-        # Baseline/reference movements for comparison
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS baseline_movements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                movement_name TEXT NOT NULL,
-                category TEXT,
-                reference_data TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                description TEXT
-            )
-        ''')
-        
-        # Progress milestones
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS progress_milestones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                milestone_type TEXT NOT NULL,
-                achieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                metric_name TEXT,
-                metric_value REAL,
-                notes TEXT,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        
-        self.conn.commit()
-    
-    def create_user(self, user_id, name, diagnosis=None, rehab_stage=None, notes=None):
-        """Create a new user"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO users (user_id, name, diagnosis, rehab_stage, notes)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, name, diagnosis, rehab_stage, notes))
-        self.conn.commit()
-        return user_id
-    
-    def create_session(self, session_id, user_id, level_name, start_time):
-        """Create a new session"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO sessions (session_id, user_id, level_name, start_time)
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                song_id     TEXT    NOT NULL,
+                song_title  TEXT    NOT NULL,
+                mode        TEXT    NOT NULL DEFAULT 'song',
+                started_at  REAL    NOT NULL,
+                ended_at    REAL,
+                score       INTEGER DEFAULT 0,
+                max_combo   INTEGER DEFAULT 0,
+                total_notes INTEGER DEFAULT 0,
+                hits        INTEGER DEFAULT 0,
+                misses      INTEGER DEFAULT 0,
+                perfects    INTEGER DEFAULT 0,
+                goods       INTEGER DEFAULT 0,
+                oks         INTEGER DEFAULT 0,
+                accuracy    REAL    DEFAULT 0.0,
+                -- JSON blob: average deviation per joint (21 floats)
+                avg_joint_deviations TEXT
+            );
+
+            -- Per-note attempt data: one row per note in a session
+            CREATE TABLE IF NOT EXISTS session_notes (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id    INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                note_index    INTEGER NOT NULL,
+                pose_expected INTEGER NOT NULL,
+                pose_detected INTEGER,
+                accuracy_label TEXT,
+                hit           INTEGER NOT NULL DEFAULT 0,
+                -- JSON: 21-element list of {x, y} for detected landmarks
+                landmarks_detected TEXT,
+                -- JSON: 21-element list of {x, y} for ideal landmarks
+                landmarks_ideal    TEXT,
+                -- JSON: 21-element list of floats (Euclidean deviation per joint)
+                joint_deviations   TEXT,
+                timestamp     REAL NOT NULL
+            );
+
+            -- Ideal poses: one row per pose (5 total). Captured from user or preset.
+            CREATE TABLE IF NOT EXISTS ideal_poses (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                pose_idx  INTEGER NOT NULL UNIQUE,
+                pose_name TEXT    NOT NULL,
+                -- JSON: 21-element list of {x, y} (wrist-normalized)
+                landmarks TEXT    NOT NULL,
+                captured_at REAL  NOT NULL
+            );
+
+            -- Indexes for common queries
+            CREATE INDEX IF NOT EXISTS idx_session_notes_session
+                ON session_notes(session_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_song
+                ON sessions(song_id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_started
+                ON sessions(started_at);
+        """)
+
+
+# ──────────────────────────────────────────────────
+#  Session CRUD
+# ──────────────────────────────────────────────────
+
+def create_session(song_id, song_title, mode="song"):
+    """Start a new session. Returns the session ID."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO sessions (song_id, song_title, mode, started_at) VALUES (?, ?, ?, ?)",
+            (song_id, song_title, mode, time.time()),
+        )
+        return cur.lastrowid
+
+
+def end_session(session_id, score, max_combo, total_notes, hits, misses,
+                perfects, goods, oks, accuracy, avg_joint_deviations=None):
+    """Finalize a session with summary stats."""
+    devs_json = json.dumps(avg_joint_deviations) if avg_joint_deviations else None
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE sessions SET
+                ended_at = ?, score = ?, max_combo = ?, total_notes = ?,
+                hits = ?, misses = ?, perfects = ?, goods = ?, oks = ?,
+                accuracy = ?, avg_joint_deviations = ?
+            WHERE id = ?
+        """, (time.time(), score, max_combo, total_notes, hits, misses,
+              perfects, goods, oks, accuracy, devs_json, session_id))
+
+
+def get_session(session_id):
+    """Fetch a single session by ID."""
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_all_sessions(limit=50, song_id=None):
+    """Fetch recent sessions, optionally filtered by song."""
+    with get_db() as conn:
+        if song_id:
+            rows = conn.execute(
+                "SELECT * FROM sessions WHERE song_id = ? ORDER BY started_at DESC LIMIT ?",
+                (song_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ──────────────────────────────────────────────────
+#  Per-note data
+# ──────────────────────────────────────────────────
+
+def add_note_data(session_id, note_index, pose_expected, pose_detected,
+                  accuracy_label, hit, landmarks_detected, landmarks_ideal,
+                  joint_deviations, timestamp):
+    """Record per-note joint tracking data."""
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO session_notes
+                (session_id, note_index, pose_expected, pose_detected,
+                 accuracy_label, hit, landmarks_detected, landmarks_ideal,
+                 joint_deviations, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            session_id, note_index, pose_expected, pose_detected,
+            accuracy_label, int(hit),
+            json.dumps(landmarks_detected) if landmarks_detected else None,
+            json.dumps(landmarks_ideal) if landmarks_ideal else None,
+            json.dumps(joint_deviations) if joint_deviations else None,
+            timestamp,
+        ))
+
+
+def get_session_notes(session_id):
+    """Get all note data for a session."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM session_notes WHERE session_id = ? ORDER BY note_index",
+            (session_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # Parse JSON fields
+            for field in ("landmarks_detected", "landmarks_ideal", "joint_deviations"):
+                if d[field]:
+                    d[field] = json.loads(d[field])
+            result.append(d)
+        return result
+
+
+def get_joint_averages(session_id):
+    """Compute per-joint average deviation for a session."""
+    notes = get_session_notes(session_id)
+    if not notes:
+        return None
+
+    totals = [0.0] * 21
+    counts = [0] * 21
+
+    for note in notes:
+        devs = note.get("joint_deviations")
+        if devs and len(devs) == 21:
+            for i, d in enumerate(devs):
+                if d is not None:
+                    totals[i] += d
+                    counts[i] += 1
+
+    averages = []
+    for i in range(21):
+        averages.append(round(totals[i] / counts[i], 4) if counts[i] > 0 else None)
+    return averages
+
+
+# ──────────────────────────────────────────────────
+#  Ideal Poses
+# ──────────────────────────────────────────────────
+
+def save_ideal_pose(pose_idx, pose_name, landmarks):
+    """Save or update the ideal landmark positions for a pose.
+    `landmarks` is a list of 21 {x, y} dicts (wrist-normalized)."""
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO ideal_poses (pose_idx, pose_name, landmarks, captured_at)
             VALUES (?, ?, ?, ?)
-        ''', (session_id, user_id, level_name, start_time))
-        self.conn.commit()
-        return session_id
-    
-    def update_session(self, session_id, **kwargs):
-        """Update session with completion data"""
-        cursor = self.conn.cursor()
-        
-        # Build dynamic UPDATE query
-        fields = []
-        values = []
-        for key, value in kwargs.items():
-            fields.append(f"{key} = ?")
-            values.append(value)
-        
-        values.append(session_id)
-        query = f"UPDATE sessions SET {', '.join(fields)} WHERE session_id = ?"
-        
-        cursor.execute(query, values)
-        self.conn.commit()
-    
-    def save_frame_data(self, session_id, frame_data):
-        """Save time series frame data"""
-        cursor = self.conn.cursor()
-        
-        for i, frame in enumerate(frame_data):
-            features = frame['features']
-            
-            cursor.execute('''
-                INSERT INTO movement_timeseries (
-                    session_id, timestamp_ms, frame_number,
-                    landmark_positions, joint_angles, hand_openness,
-                    velocity_mean, velocity_max, acceleration_mean,
-                    smoothness_score, tremor_score, range_of_motion, event_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                session_id,
-                frame['timestamp_ms'],
-                i,
-                json.dumps(features.get('landmark_positions', [])),
-                json.dumps(features.get('joint_angles', {})),
-                features.get('hand_openness'),
-                features.get('velocity', {}).get('mean_speed') if features.get('velocity') else None,
-                features.get('velocity', {}).get('max_speed') if features.get('velocity') else None,
-                features.get('acceleration', {}).get('mean_acceleration') if features.get('acceleration') else None,
-                features.get('smoothness'),
-                features.get('tremor_score'),
-                features.get('range_of_motion', {}).get('mean_rom') if features.get('range_of_motion') else None,
-                frame.get('event_type')
-            ))
-        
-        self.conn.commit()
-    
-    def save_session_events(self, session_id, events):
-        """Save session events"""
-        cursor = self.conn.cursor()
-        
-        for event in events:
-            cursor.execute('''
-                INSERT INTO session_events (session_id, timestamp, event_type, event_data)
-                VALUES (?, ?, ?, ?)
-            ''', (
-                session_id,
-                event['timestamp'],
-                event['event_type'],
-                json.dumps(event.get('data', {}))
-            ))
-        
-        self.conn.commit()
-    
-    def get_user_sessions(self, user_id, limit=None):
-        """Get all sessions for a user"""
-        cursor = self.conn.cursor()
-        
-        query = '''
-            SELECT * FROM sessions 
-            WHERE user_id = ? 
-            ORDER BY start_time DESC
-        '''
-        
-        if limit:
-            query += f' LIMIT {limit}'
-        
-        cursor.execute(query, (user_id,))
-        return [dict(row) for row in cursor.fetchall()]
-    
-    def get_session_timeseries(self, session_id):
-        """Get time series data for a session"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT * FROM movement_timeseries
-            WHERE session_id = ?
-            ORDER BY timestamp_ms
-        ''', (session_id,))
-        
-        return [dict(row) for row in cursor.fetchall()]
-    
-    def get_user_progress_over_time(self, user_id, metric='avg_smoothness'):
-        """Get progression of a metric over time"""
-        cursor = self.conn.cursor()
-        cursor.execute(f'''
-            SELECT start_time, level_name, {metric}
-            FROM sessions
-            WHERE user_id = ? AND {metric} IS NOT NULL
-            ORDER BY start_time
-        ''', (user_id,))
-        
-        return [dict(row) for row in cursor.fetchall()]
-    
-    def get_all_sessions_for_training(self, min_frames=100, completed_only=True):
-        """Get all sessions suitable for ML training"""
-        cursor = self.conn.cursor()
-        
-        query = '''
-            SELECT s.*, u.rehab_stage, u.diagnosis
-            FROM sessions s
-            JOIN users u ON s.user_id = u.user_id
-            WHERE s.total_frames >= ?
-        '''
-        
-        if completed_only:
-            query += ' AND s.completed = 1'
-        
-        query += ' ORDER BY s.start_time'
-        
-        cursor.execute(query, (min_frames,))
-        
-        columns = [desc[0] for desc in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
-    
-    def save_baseline(self, movement_name, category, reference_data, description=None):
-        """Save a baseline/reference movement pattern"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO baseline_movements (movement_name, category, reference_data, description)
-            VALUES (?, ?, ?, ?)
-        ''', (movement_name, category, json.dumps(reference_data), description))
-        self.conn.commit()
-        return cursor.lastrowid
-    
-    def record_milestone(self, user_id, milestone_type, metric_name=None, 
-                        metric_value=None, notes=None):
-        """Record a progress milestone"""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO progress_milestones (user_id, milestone_type, metric_name, 
-                                             metric_value, notes)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, milestone_type, metric_name, metric_value, notes))
-        self.conn.commit()
-        return cursor.lastrowid
-    
-    def get_user_statistics(self, user_id):
-        """Get comprehensive statistics for a user"""
-        cursor = self.conn.cursor()
-        
-        # Total sessions
-        cursor.execute('SELECT COUNT(*) as total FROM sessions WHERE user_id = ?', (user_id,))
-        total_sessions = cursor.fetchone()['total']
-        
-        # Average metrics
-        cursor.execute('''
-            SELECT 
-                AVG(avg_speed) as avg_speed,
-                AVG(avg_smoothness) as avg_smoothness,
-                AVG(avg_tremor) as avg_tremor,
-                SUM(duration_seconds) as total_time,
-                SUM(stars_earned) as total_stars
-            FROM sessions
-            WHERE user_id = ? AND completed = 1
-        ''', (user_id,))
-        
-        stats = dict(cursor.fetchone())
-        stats['total_sessions'] = total_sessions
-        
-        return stats
-    
-    def close(self):
-        """Close database connection"""
-        if self.conn:
-            self.conn.close()
+            ON CONFLICT(pose_idx) DO UPDATE SET
+                landmarks = excluded.landmarks,
+                captured_at = excluded.captured_at
+        """, (pose_idx, pose_name, json.dumps(landmarks), time.time()))
+
+
+def get_ideal_pose(pose_idx):
+    """Get the ideal landmark positions for a pose."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ideal_poses WHERE pose_idx = ?", (pose_idx,)
+        ).fetchone()
+        if row:
+            d = dict(row)
+            d["landmarks"] = json.loads(d["landmarks"])
+            return d
+        return None
+
+
+def get_all_ideal_poses():
+    """Get all stored ideal poses."""
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM ideal_poses ORDER BY pose_idx").fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["landmarks"] = json.loads(d["landmarks"])
+            result.append(d)
+        return result
+
+
+def has_ideal_poses():
+    """Check if all 5 ideal poses have been captured."""
+    with get_db() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM ideal_poses").fetchone()[0]
+        return count >= 5
+
+
+# ──────────────────────────────────────────────────
+#  Analytics Helpers
+# ──────────────────────────────────────────────────
+
+def get_session_comparison(session_id_a, session_id_b):
+    """Compare joint averages between two sessions."""
+    avgs_a = get_joint_averages(session_id_a)
+    avgs_b = get_joint_averages(session_id_b)
+    if not avgs_a or not avgs_b:
+        return None
+
+    comparison = []
+    for i in range(21):
+        a = avgs_a[i] if avgs_a[i] is not None else 0
+        b = avgs_b[i] if avgs_b[i] is not None else 0
+        comparison.append({
+            "joint": LANDMARK_NAMES[i],
+            "index": i,
+            "session_a": round(a, 4),
+            "session_b": round(b, 4),
+            "improvement": round(a - b, 4),  # positive = improved (lower deviation)
+        })
+    return comparison
+
+
+def get_progress_over_time(song_id=None, limit=20):
+    """Get accuracy trend over recent sessions."""
+    sessions = get_all_sessions(limit=limit, song_id=song_id)
+    return [{
+        "id": s["id"],
+        "song_title": s["song_title"],
+        "accuracy": s["accuracy"],
+        "score": s["score"],
+        "started_at": s["started_at"],
+    } for s in reversed(sessions)]  # chronological order
+
+
+# Initialize DB on import
+init_db()

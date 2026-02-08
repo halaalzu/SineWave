@@ -24,36 +24,118 @@ app.secret_key = 'flowstate_rhythm_game_secret_key_2026'  # Required for session
 # -------------------------
 pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
 
-def generate_tone(frequency, duration=0.2, volume=0.3):
-    """Generate a simple sine wave tone"""
+def generate_musical_note(frequency, duration=0.4, volume=0.4, instrument='piano'):
+    """Generate a musical note with harmonics and proper envelope"""
     sample_rate = 22050
     n_samples = int(sample_rate * duration)
+    t = np.arange(n_samples) / sample_rate
     
-    # Generate sine wave
-    samples = np.sin(2 * np.pi * np.arange(n_samples) * frequency / sample_rate)
+    # Create different instrument sounds
+    if instrument == 'piano':
+        # Piano-like sound with harmonics
+        fundamental = np.sin(2 * np.pi * frequency * t)
+        harmonic2 = 0.5 * np.sin(2 * np.pi * frequency * 2 * t)
+        harmonic3 = 0.25 * np.sin(2 * np.pi * frequency * 3 * t)
+        harmonic4 = 0.125 * np.sin(2 * np.pi * frequency * 4 * t)
+        samples = fundamental + harmonic2 + harmonic3 + harmonic4
+        
+    elif instrument == 'bell':
+        # Bell-like sound with metallic harmonics
+        fundamental = np.sin(2 * np.pi * frequency * t)
+        harmonic2 = 0.6 * np.sin(2 * np.pi * frequency * 2.76 * t)
+        harmonic3 = 0.4 * np.sin(2 * np.pi * frequency * 5.4 * t)
+        harmonic4 = 0.25 * np.sin(2 * np.pi * frequency * 8.93 * t)
+        samples = fundamental + harmonic2 + harmonic3 + harmonic4
+        
+    elif instrument == 'flute':
+        # Flute-like sound (mostly fundamental with slight harmonics)
+        fundamental = np.sin(2 * np.pi * frequency * t)
+        harmonic2 = 0.1 * np.sin(2 * np.pi * frequency * 2 * t)
+        harmonic3 = 0.05 * np.sin(2 * np.pi * frequency * 3 * t)
+        samples = fundamental + harmonic2 + harmonic3
+        
+    else:  # default to sine wave
+        samples = np.sin(2 * np.pi * frequency * t)
     
-    # Apply fade out to prevent clicks
-    fade_len = int(sample_rate * 0.05)  # 50ms fade
-    fade_out = np.linspace(1, 0, fade_len)
-    samples[-fade_len:] *= fade_out
+    # Apply ADSR envelope (Attack, Decay, Sustain, Release)
+    attack_time = 0.05   # 50ms attack
+    decay_time = 0.1     # 100ms decay
+    sustain_level = 0.7  # 70% sustain level
+    release_time = 0.15  # 150ms release
+    
+    attack_samples = int(sample_rate * attack_time)
+    decay_samples = int(sample_rate * decay_time)
+    release_samples = int(sample_rate * release_time)
+    sustain_samples = n_samples - attack_samples - decay_samples - release_samples
+    
+    if sustain_samples > 0:
+        # Attack phase (0 to 1)
+        attack_env = np.linspace(0, 1, attack_samples)
+        # Decay phase (1 to sustain_level)
+        decay_env = np.linspace(1, sustain_level, decay_samples)
+        # Sustain phase (constant sustain_level)
+        sustain_env = np.full(sustain_samples, sustain_level)
+        # Release phase (sustain_level to 0)
+        release_env = np.linspace(sustain_level, 0, release_samples)
+        
+        envelope = np.concatenate([attack_env, decay_env, sustain_env, release_env])
+    else:
+        # If duration is too short, just do attack and release
+        envelope = np.concatenate([
+            np.linspace(0, 1, attack_samples),
+            np.linspace(1, 0, n_samples - attack_samples)
+        ])
+    
+    # Apply envelope and volume
+    samples = samples * envelope * volume
+    
+    # Normalize to prevent clipping
+    samples = samples / np.max(np.abs(samples)) * 0.8
     
     # Convert to 16-bit integers
-    samples = (samples * volume * 32767).astype(np.int16)
+    samples = (samples * 32767).astype(np.int16)
     
-    # Create stereo sound (duplicate mono to stereo)
-    stereo_samples = np.column_stack((samples, samples))
-    
-    return pygame.sndarray.make_sound(stereo_samples)
+    return pygame.sndarray.make_sound(samples)
 
-# Musical notes (frequencies in Hz)
-# Pose mapping: palm=0(F), 1(C), 2(D), 3(E), fist=4(G)
-AUDIO_NOTES = {
-    0: generate_tone(349.23),  # F4 - palm
-    1: generate_tone(261.63),  # C4 - 1 finger
-    2: generate_tone(293.66),  # D4 - 2 fingers
-    3: generate_tone(329.63),  # E4 - 3 fingers
-    4: generate_tone(392.00),  # G4 - fist
+# Musical notes library with proper note frequencies (4th octave)
+MUSICAL_NOTES = {
+    'C4': 261.63,   # Middle C
+    'D4': 293.66,   # D
+    'E4': 329.63,   # E
+    'F4': 349.23,   # F
+    'G4': 392.00,   # G
+    'A4': 440.00,   # A
+    'B4': 493.88,   # B
+    'C5': 523.25,   # High C
 }
+
+# Pose to musical note mapping with different instruments
+POSE_MUSIC_MAPPING = {
+    0: {'note': 'C4', 'instrument': 'piano', 'name': 'Palm - Piano C'},
+    1: {'note': 'D4', 'instrument': 'piano', 'name': '1 Finger - Piano D'},
+    2: {'note': 'E4', 'instrument': 'piano', 'name': '2 Fingers - Piano E'},
+    3: {'note': 'F4', 'instrument': 'piano', 'name': '3 Fingers - Piano F'},
+    4: {'note': 'G4', 'instrument': 'bell', 'name': 'Fist - Bell G'},
+}
+
+# Generate audio notes lazily with musical instruments
+AUDIO_NOTES = {}
+
+def get_musical_note(pose_id):
+    """Get or generate musical note for pose with specified instrument"""
+    if pose_id not in AUDIO_NOTES:
+        if pose_id in POSE_MUSIC_MAPPING:
+            mapping = POSE_MUSIC_MAPPING[pose_id]
+            frequency = MUSICAL_NOTES[mapping['note']]
+            instrument = mapping['instrument']
+            AUDIO_NOTES[pose_id] = generate_musical_note(frequency, instrument=instrument)
+    return AUDIO_NOTES.get(pose_id)
+
+def get_note_info(pose_id):
+    """Get musical note information for display"""
+    if pose_id in POSE_MUSIC_MAPPING:
+        return POSE_MUSIC_MAPPING[pose_id]['name']
+    return "No Note"
 
 # -------------------------
 # 2. Model Setup
@@ -752,16 +834,20 @@ def generate_frames_freestyle():
                     else:
                         history.clear()
             
+            # Get the most common pose prediction
             if history:
                 predicted_pose_idx = max(set(history), key=history.count)
-                predicted_pose = poses[predicted_pose_idx]
+            else:
+                predicted_pose_idx = None
         
         # --- FREESTYLE AUDIO LOGIC ---
         # Play audio continuously based on held pose
-        if predicted_pose_idx is not None and predicted_pose_idx in AUDIO_NOTES:
+        if predicted_pose_idx is not None and predicted_pose_idx in POSE_MUSIC_MAPPING:
             # If pose changed or 1 second elapsed, play the note
             if (predicted_pose_idx != last_freestyle_pose) or (current_time - last_audio_time >= 1.0):
-                AUDIO_NOTES[predicted_pose_idx].play()
+                note = get_musical_note(predicted_pose_idx)
+                if note:
+                    note.play()
                 last_freestyle_pose = predicted_pose_idx
                 last_audio_time = current_time
                 current_playing_note = predicted_pose_idx
@@ -977,15 +1063,15 @@ def generate_frames():
             
             # ──────────────────────────────────────────────────
             # AUDIO + INCORRECT FEEDBACK
-            # When a note enters the hit zone, play the user's
-            # detected pose audio.  If the pose is wrong, show
-            # an incorrect visual indicator.
+            # When a note enters the hit zone, play the user's detected pose audio
             # ──────────────────────────────────────────────────
             if not note.hit and not note.missed and note.is_in_hit_zone():
                 # Play audio based on user's detected pose (once per note)
                 if not note.audio_played and predicted_pose_idx is not None:
-                    if predicted_pose_idx in AUDIO_NOTES:
-                        AUDIO_NOTES[predicted_pose_idx].play()
+                    if predicted_pose_idx in POSE_MUSIC_MAPPING:
+                        musical_note = get_musical_note(predicted_pose_idx)
+                        if musical_note:
+                            musical_note.play()
                     note.audio_played = True
                 
                 # Show incorrect visual feedback if wrong pose
@@ -1424,7 +1510,21 @@ def api_ideal_poses():
     captured = {p["pose_idx"]: True for p in all_poses}
     return jsonify({
         "has_all": db.has_ideal_poses(),
-        "poses": [{"idx": i, "name": poses[i], "captured": captured.get(i, False)} for i in range(5)]
+        "poses": [{
+            "idx": i, 
+            "name": poses[i], 
+            "captured": captured.get(i, False),
+            "musical_note": get_note_info(i)
+        } for i in range(5)]
+    })
+
+@app.route('/api/music_notes')
+def api_music_notes():
+    """Get the musical notes library mapping."""
+    return jsonify({
+        "musical_notes": MUSICAL_NOTES,
+        "pose_mapping": POSE_MUSIC_MAPPING,
+        "available_instruments": ["piano", "bell", "flute"]
     })
 
 
@@ -1505,4 +1605,4 @@ def dashboard():
 # 8. Main Entry Point
 # -------------------------
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)

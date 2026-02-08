@@ -1,0 +1,31 @@
+{
+  "model_name": "rehab_stage_classifier",
+  "model_type": "random_forest",
+  "timestamp": "20260207_135216",
+  "feature_names": [
+    "velocity_mean",
+    "velocity_std",
+    "velocity_max",
+    "velocity_min",
+    "acceleration_mean",
+    "acceleration_std",
+    "acceleration_max",
+    "acceleration_p90",
+    "smoothness_mean",
+    "smoothness_std",
+    "smoothness_min",
+    "tremor_mean",
+    "tremor_std",
+    "tremor_max",
+    "tremor_p90",
+    "rom_mean",
+    "rom_std",
+    "rom_max",
+    "hand_openness_mean",
+    "hand_openness_std",
+    "total_frames",
+    "duration_seconds"
+  ],
+  "model_path": "models/rehab_stage_classifier_20260207_135216.pkl",
+  "scaler_path": "models/rehab_stage_classifier_scaler_20260207_135216.pkl"
+}

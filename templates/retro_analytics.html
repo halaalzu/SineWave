@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}FlowState - Analytics Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Additional styles for analytics dashboard */
+.dashboard-container {
+    background: var(--tape-black);
+    color: var(--label-cream);
+    border: 8px solid var(--cassette-red);
+}
+
+.header {
+    text-align: center;
+    padding: 2rem;
+    border-bottom: 3px solid var(--cassette-red);
+}
+
+.logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3rem;
+    letter-spacing: 0.3em;
+    color: var(--cassette-red);
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: var(--vintage-beige);
+    letter-spacing: 0.1em;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    padding: 2rem;
+}
+
+.stat-card {
+    background: var(--cassette-red);
+    border: 4px solid var(--label-cream);
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    letter-spacing: 0.2em;
+    color: var(--label-cream);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    color: var(--label-cream);
+    opacity: 0.9;
+}
+
+.session-history {
+    padding: 2rem;
+    border-top: 3px solid var(--cassette-red);
+}
+
+.history-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.2em;
+    color: var(--cassette-red);
+    margin-bottom: 1rem;
+}
+
+.session-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.session-item {
+    background: var(--dark-brown);
+    border: 2px solid var(--vintage-beige);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.session-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    color: var(--vintage-beige);
+}
+
+.session-details {
+    display: flex;
+    gap: 2rem;
+    font-size: 0.9rem;
+    color: var(--label-cream);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="dashboard-container cassette-container">
+        <!-- Header -->
+        <div class="header">
+            <h1 class="logo">FLOWSTATE STATS</h1>
+            <p class="subtitle">Hand Therapy Performance Dashboard</p>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ sessions|length }}</div>
+                <div class="stat-label">TOTAL SESSIONS</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-value">
+                    {% if sessions %}
+                        {{ "%.1f"|format(sessions|map(attribute='accuracy')|select('gt', 0)|list|sum / [sessions|map(attribute='accuracy')|select('gt', 0)|list|length, 1]|max) }}%
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="stat-label">AVG ACCURACY</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-value">
+                    {% if sessions %}{{ sessions|map(attribute='score')|max }}{% else %}—{% endif %}
+                </div>
+                <div class="stat-label">BEST SCORE</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-value">
+                    {% if sessions %}{{ sessions|map(attribute='max_combo')|max }}{% else %}—{% endif %}
+                </div>
+                <div class="stat-label">MAX COMBO</div>
+            </div>
+        </div>
+
+        <!-- Session History -->
+        <div class="session-history">
+            <h2 class="history-title">RECENT SESSIONS</h2>
+            <div class="session-list">
+                {% for session in sessions[:5] %}
+                <div class="session-item">
+                    <div class="session-number">SESSION #{{ loop.index }}</div>
+                    <div class="session-details">
+                        <span>{{ session.timestamp.strftime('%b %d') if session.timestamp else 'Recent' }}</span>
+                        <span>{{ session.accuracy }}% ACC</span>
+                        <span>Score: {{ session.score }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="session-item">
+                    <div class="session-number">NO DATA</div>
+                    <div class="session-details">
+                        <span>Start playing to see statistics</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Back button -->
+        <button class="analytics-btn" onclick="goBack()" style="bottom: 2rem; left: 2rem;">
+            ← BACK TO MENU
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function goBack() {
+    const container = document.querySelector('.cassette-container');
+    container.style.transition = 'transform 0.4s ease';
+    container.style.transform = 'rotateY(-180deg)';
+
+    setTimeout(() => {
+        window.location.href = '/retro';
+        container.style.transform = 'rotateY(0deg)';
+    }, 400);
+}
+</script>
+{% endblock %}

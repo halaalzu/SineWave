@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Play It Again - Main Menu{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cassette-container">
+        <!-- Top border lines -->
+        <div class="border-lines-top"></div>
+
+        <!-- Barcode top right -->
+        <div class="barcode">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <!-- Red panel on left -->
+        <div class="red-panel">
+            <div class="tape-detail">
+                <div class="tape-reel"></div>
+            </div>
+        </div>
+
+        <!-- Vertical "AGAIN" text -->
+        <div class="vertical-text-left">FLOW</div>
+
+        <!-- Main content -->
+        <div class="content">
+            <div class="main-content">
+                <!-- Title -->
+                <div class="title-section">
+                    <h1 class="main-title">FLOW<br>STATE</h1>
+                </div>
+
+                <!-- Menu Cards -->
+                <div class="menu-cards">
+                    <!-- Free Style Card -->
+                    <div class="menu-card" onclick="selectMode('freestyle')">
+                        <div class="card-content">
+                            <div class="card-icon">🎨</div>
+                            <div class="card-text">
+                                <div class="card-title">FREE STYLE</div>
+                                <div class="card-description">Practice hand poses at your own pace</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Levels Card -->
+                    <div class="menu-card" onclick="selectMode('levels')">
+                        <div class="card-content">
+                            <div class="card-icon">🎮</div>
+                            <div class="card-text">
+                                <div class="card-title">SONGS</div>
+                                <div class="card-description">Play along to structured musical tracks</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vertical subtitle on right -->
+            <div class="subtitle-line">HAND THERAPY</div>
+
+            <!-- Analytics button -->
+            <button class="analytics-btn" onclick="goToAnalytics()">
+                📊 STATS
+            </button>
+        </div>
+
+        <!-- Bottom barcode -->
+        <div class="barcode-bottom">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+        </div>
+    </div>
+</div>
+{% endblock %}

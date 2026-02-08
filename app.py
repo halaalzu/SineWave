@@ -694,6 +694,15 @@ def draw_incorrect_effect(img, x, y, age):
 # -------------------------
 # -------------------------
 cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("ERROR: Could not open camera! Make sure your camera is connected and not in use by another application.")
+    print("Trying to open camera again...")
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("FATAL: Still cannot open camera after retry!")
+else:
+    print("✓ Camera opened successfully")
+    
 frame_timestamp_ms = 0
 
 # Initialize MediaPipe HandLandmarker globally
@@ -714,12 +723,30 @@ landmarker = vision.HandLandmarker.create_from_options(options)
 # -------------------------
 @app.route('/')
 def home():
-    """Home page with navigation options"""
+    """Home page with retro cassette-style main menu"""
+    return render_template('retro_main_menu.html')
+
+@app.route('/classic')
+def classic_home():
+    """Classic home page (original version)"""
     return render_template('home.html')
 
 @app.route('/songs')
 def song_selection():
-    """Song selection screen - shows list of available songs"""
+    """Song selection screen with retro theme"""
+    songs = []
+    for song_id, info in SONG_INFO.items():
+        songs.append({
+            'id': song_id,
+            'title': info['title'], 
+            'artist': info.get('artist', 'FlowState'),
+            'difficulty': info.get('difficulty', 'Medium')
+        })
+    return render_template('retro_songs.html', songs=songs)
+
+@app.route('/classic/songs')
+def classic_song_selection():
+    """Classic song selection screen (original version)"""
     songs = []
     for song_id, info in SONG_INFO.items():
         songs.append({
@@ -1710,4 +1737,5 @@ def dashboard():
 # 8. Main Entry Point
 # -------------------------
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)
+    # Disable reloader to prevent camera from being opened twice
+    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True, use_reloader=False)

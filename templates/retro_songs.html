@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}FlowState - Song Selection{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="cassette-container">
+        <!-- Top border lines -->
+        <div class="border-lines-top"></div>
+
+        <!-- Barcode top right -->
+        <div class="barcode">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <!-- Red panel on left -->
+        <div class="red-panel">
+            <div class="tape-detail">
+                <div class="tape-reel"></div>
+            </div>
+        </div>
+
+        <!-- Vertical text -->
+        <div class="vertical-text-left">SONGS</div>
+
+        <!-- Main content -->
+        <div class="content">
+            <div class="main-content">
+                <!-- Title -->
+                <div class="title-section">
+                    <h1 class="main-title">SONG<br>SELECTION</h1>
+                </div>
+
+                <!-- Song Cards -->
+                <div class="menu-cards">
+                    {% for song in songs %}
+                    <div class="menu-card" onclick="selectSong('{{ song.id }}')">
+                        <div class="card-content">
+                            <div class="card-icon">🎵</div>
+                            <div class="card-text">
+                                <div class="card-title">{{ song.title }}</div>
+                                <div class="card-description">{{ song.artist }} • {{ song.difficulty }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Vertical subtitle on right -->
+            <div class="subtitle-line">CHOOSE TRACK</div>
+
+            <!-- Back button -->
+            <button class="analytics-btn" onclick="goBack()">
+                ← BACK
+            </button>
+        </div>
+
+        <!-- Bottom barcode -->
+        <div class="barcode-bottom">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectSong(songId) {
+    const container = document.querySelector('.cassette-container');
+    container.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+    container.style.transform = 'scale(0.95)';
+    container.style.opacity = '0.7';
+
+    setTimeout(() => {
+        window.location.href = `/select_song/${songId}`;
+        container.style.transform = 'scale(1)';
+        container.style.opacity = '1';
+    }, 400);
+}
+
+function goBack() {
+    const container = document.querySelector('.cassette-container');
+    container.style.transition = 'transform 0.4s ease';
+    container.style.transform = 'rotateX(180deg)';
+
+    setTimeout(() => {
+        window.location.href = '/retro';
+        container.style.transform = 'rotateX(0deg)';
+    }, 400);
+}
+</script>
+{% endblock %}

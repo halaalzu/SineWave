@@ -826,8 +826,9 @@ def generate_frames_freestyle():
     
     while True:
         success, image = cap.read()
-        if not success: 
-            break
+        if not success:
+            time.sleep(0.01)  # Brief delay to prevent busy-waiting
+            continue
         
         current_time = time.time()
         
@@ -958,8 +959,8 @@ def generate_frames_freestyle():
         cv2.putText(flipped, f"Confidence: {int(confidence * 100)}%", (conf_x + conf_w + 10, conf_y + 15), 
                    font, 0.5, (255, 255, 255), 1)
         
-        # Encode frame as JPEG
-        ret, buffer = cv2.imencode('.jpg', flipped)
+        # Encode frame as JPEG with lower quality for faster processing
+        ret, buffer = cv2.imencode('.jpg', flipped, [cv2.IMWRITE_JPEG_QUALITY, 75])
         frame = buffer.tobytes()
         
         # Yield frame in MJPEG format
@@ -976,8 +977,9 @@ def generate_frames():
     
     while True:
         success, image = cap.read()
-        if not success: 
-            break
+        if not success:
+            time.sleep(0.01)  # Brief delay to prevent busy-waiting
+            continue
         
         current_time = time.time()
         
@@ -1336,8 +1338,8 @@ def generate_frames():
         cv2.putText(flipped, f"{int(confidence * 100)}%", (conf_x + conf_w + 10, conf_y + 12), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Encode frame as JPEG
-        ret, buffer = cv2.imencode('.jpg', flipped)
+        # Encode frame as JPEG with lower quality for faster processing
+        ret, buffer = cv2.imencode('.jpg', flipped, [cv2.IMWRITE_JPEG_QUALITY, 75])
         frame = buffer.tobytes()
         
         # Yield frame in MJPEG format
@@ -1378,7 +1380,8 @@ def generate_calibration_frames():
     while True:
         success, image = cap.read()
         if not success:
-            break
+            time.sleep(0.01)  # Brief delay to prevent busy-waiting
+            continue
 
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
@@ -1738,4 +1741,6 @@ def dashboard():
 # -------------------------
 if __name__ == '__main__':
     # Disable reloader to prevent camera from being opened twice
-    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True, use_reloader=False)
+    # Use PORT environment variable for deployment platforms (Render, Heroku, etc.)
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=True, host='0.0.0.0', port=port, threaded=True, use_reloader=False)
